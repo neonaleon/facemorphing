@@ -107,7 +107,8 @@ class GUI:
 
 import sys
 sys.path.append("C:\OpenCV2.1\Python2.6\Lib\site-packages")
-import cv
+import cv2
+from cv2 import cv
 
 dir = "./"
 imgfile1 = dir + "image-7.jpg"
