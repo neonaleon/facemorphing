@@ -90,7 +90,7 @@ def morphMain():
 	cv.WriteFrame(outvid, imgA)
 	
 	#loop through number of frames and call morphing function
-	for i in range(1, int(framerate * duration)):
+	for i in xrange(1, int(framerate * duration)):
 		t = i / (framerate * duration)
 		#calculate interpolated lines
 		interpLines = interpolateLines(aLines, bLines, t)
@@ -125,34 +125,33 @@ def morphMain():
 #		image to warp the two images towards the lines while cross-dissolving 
 #		the images to blend them over time.
 ################################################################################
-def imageMorph(sourceImage, destinationImage, sourceLines, interpLines, destinationLines, t):
+def imageMorph(imageA, imageB, aLines, interpLines, bLines, t):
 	#CONSTANTS
 	a = 0.5 #smoothness of warping
 	b = 1.25 #relative line strength
 	p = 0.25 #line size strength
 
 	#get width and height of each image
-	width = sourceImage.width
-	height = sourceImage.height
+	width = imageA.width
+	height = imageA.height
 
 	#create new blank image
 	output = cv.CreateImage((width, height), 8, 3)
 
 	#loop through the pixels of both images
-	for x in range(width):
-		for y in range(height):
+	for x in xrange(width):
+		for y in xrange(height):
 
 			#get pixel values
 			X = (x, y) #get x and y for the current pixel
 
-			#initialize weight and displacement values
-			DSUMA = [0, 0] #intialize source displacement sum to 0
-			DSUMB = [0, 0] #intialize destination displacement sum to 0
+			#initialize weight and displacementA values
+			DSUMA = [0, 0] #intialize source displacementA sum to 0
+			DSUMB = [0, 0] #intialize destination displacementA sum to 0
 			weightsum = 0 #intialize source weight sum to 0
-			weightsumB = 0 #intialize destination weight sum to 0
 
 			#loop through list of lines and process each feature line in the images
-			for i in range(len(sourceLines)):
+			for i in xrange(len(aLines)):
 
 				#set the vector for the current line we are warping towards
 				P = interpLines[i][0] #destination line start point
@@ -164,30 +163,30 @@ def imageMorph(sourceImage, destinationImage, sourceLines, interpLines, destinat
 				v = calcV(X, P, Q) #v is the perpendicular distance of the current pixel to the line
 
 				#set the vector for the current line in the source image we are warping from
-				Pprime = sourceLines[i][0] #source line start point
-				Qprime = sourceLines[i][1] #source line start point
+				PprimeA = aLines[i][0] #source line start point
+				QprimeA = aLines[i][1] #source line start point
 
 				#calculate the new pixel x and y values for the current source image pixel due to warping
-				Xprime = calcXPrime(Pprime, Qprime, u, v)
+				XprimeA = calcXPrime(PprimeA, QprimeA, u, v)
 
-				#set the vector for the current line in destinationImage
-				Pprime2 = destinationLines[i][0] #destination line start point
-				Qprime2 = destinationLines[i][1] #destination line end point
+				#set the vector for the current line in imageB
+				PprimeB = bLines[i][0] #destination line start point
+				QprimeB = bLines[i][1] #destination line end point
 
 				#calculate the new pixel x and y values for the current destination image pixel due to warping
-				Xprime2 = calcXPrime(Pprime2, Qprime2, u, v)
+				XprimeB = calcXPrime(PprimeB, QprimeB, u, v)
 
 				#find how far new pixels are from current pixels in the source and destination images
-				displacement = vectorSubtraction(Xprime, X) #source image displacement
-				displacement2 = vectorSubtraction(Xprime2, X) #destination image displacement
+				displacementA = vectorSubtraction(XprimeA, X) #source image displacementA
+				displacementB = vectorSubtraction(XprimeB, X) #destination image displacementA
 
 				#check to see if the effect of u
 				#if u is greater than 1, distance is the length of the line from the pixel to the end point
-				if(u >= 1):
+				if(u > 1):
 					QX = vectorSubtraction(Q, X)
 					dist = magnitude(QX)
 				#if u is less than 0, distance is the length of the line from the pixel to the start point
-				elif(u <= 0):
+				elif(u < 0):
 					PX = vectorSubtraction(P, X)
 					dist = magnitude(PX)
 				#otherwise distance is absolute value of v
@@ -200,51 +199,50 @@ def imageMorph(sourceImage, destinationImage, sourceLines, interpLines, destinat
 				weight = math.pow(length, p)/(a + dist)
 				weight = math.pow(weight, b) #weight of current line
 
-				#add the displacement sum for source and destination
-				DSUMA = vectorAddition(DSUMA, scalarMult(displacement, weight))
-				DSUMB = vectorAddition(DSUMB, scalarMult(displacement2, weight))
+				#add the displacementA sum for source and destination
+				DSUMA = vectorAddition(DSUMA, scalarMult(displacementA, weight))
+				DSUMB = vectorAddition(DSUMB, scalarMult(displacementB, weight))
 
 				#add weight to weightsume
 				weightsum += weight
 
-				#adjust displacement sum by weightsum
-				DSUMweightsum = scalarDivision(DSUMA, weightsum)
-				DSUMweightsum2 = scalarDivision(DSUMB, weightsum)
+			#adjust displacementA sum by weightsum
+			DSUMweightsumA = scalarDivision(DSUMA, weightsum)
+			DSUMweightsumB = scalarDivision(DSUMB, weightsum)
 
-				#adjust new source and destination pixels by displacement sums
-				Xprime = vectorAddition(X, DSUMweightsum)
-				Xprime2 = vectorAddition(X, DSUMweightsum2)
+			#adjust new source and destination pixels by displacementA sums
+			XprimeA = vectorAddition(X, DSUMweightsumA)
+			XprimeB = vectorAddition(X, DSUMweightsumB)
 
-				#get x and y values for new source pixel
-				newSourceX = int(Xprime[0])
-				newSourceY = int(Xprime[1])
+			#get x and y values for new source pixel
+			preImageAX = int(XprimeA[0])
+			preImageAY = int(XprimeA[1])
 
-				#get x and y values for new destination pixel
-				newDestinationX = int(Xprime2[0])
-				newDestinationY = int(Xprime2[1])
+			#get x and y values for new destination pixel
+			preImageBX = int(XprimeB[0])
+			preImageBY = int(XprimeB[1])
 
-				#if new source xy in range of source image, get that pixel
-				if(newSourceX in range(width) and newSourceY in range(height)):
-					sourcePixel = sourceImage[newSourceY, newSourceX]
-				#otherwise get current source image pixel
-				else:
-					sourcePixel = sourceImage[y, x]
+			#if new source xy in range of source image, get that pixel
+			if(preImageAX >= 0 and preImageAX < width and preImageAY >= 0 and preImageAY < height):
+				startPixel = imageA[preImageAY, preImageAX]
+			#otherwise get current source image pixel
+			else:
+				startPixel = imageA[y, x]
 
-				#if new destination xy in range of destination image, get that pixel
-				if(newDestinationX in range(width) and newDestinationY in range(height)):
-					destPixel = destinationImage[newDestinationY, newDestinationX]
-				#otherwise get current destination image pixel
-				else:
-					destPixel = destinationImage[y, x]
+			#if new destination xy in range of destination image, get that pixel
+			if(preImageBX >= 0 and preImageBX < width and preImageBY >= 0 and preImageBY < height):
+				endPixel = imageB[preImageBY, preImageBX]
+			#otherwise get current destination image pixel
+			else:
+				endPixel = imageB[y, x]
 
-				#cross-dissolve source and destination images by the current weights due to current frame number
-				pxR = sourcePixel[0]*t + destPixel[0]*(1-t)
-				pxG = sourcePixel[1]*t + destPixel[1]*(1-t)
-				pxB = sourcePixel[2]*t + destPixel[2]*(1-t)
-	
-				#set the new image's pixel to the cross-dissolved, warped pixel color
-				output[y, x] = (pxR, pxG, pxB)
+			#cross-dissolve source and destination images by the current weights due to current frame number
+			pxR = startPixel[0]*(1-t) + endPixel[0]*t
+			pxG = startPixel[1]*(1-t) + endPixel[1]*t
+			pxB = startPixel[2]*(1-t) + endPixel[2]*t
 
+			#set the new image's pixel to the cross-dissolved, warped pixel color
+			output[y, x] = (pxR, pxG, pxB)
 
 	#return the result
 	return output
@@ -253,8 +251,8 @@ def imageMorph(sourceImage, destinationImage, sourceLines, interpLines, destinat
 ################################################################################
 # Function name: interpolateLines
 # Parameters:
-#		-sourceLines: the list of source lines
-#		-destinationLines: the list of destination lines
+#		-aLines: the list of source lines
+#		-bLines: the list of destination lines
 #		-numLines: the total number of feature lines
 #		-currFrame: the current frame being morphed
 #		-totalFrames: the total number of frames created
@@ -270,11 +268,11 @@ def interpolateLines(sourceLines, destinationLines, t):
 	#initialize newLines to number of line segments needed
 	newLines = []
 
-	for i in range(len(sourceLines)):
-		ptAx = sourceLines[i][0][0] * t + destinationLines[i][0][0] * (1 - t)
-		ptAy = sourceLines[i][0][1] * t + destinationLines[i][0][1] * (1 - t)
-		ptBx = sourceLines[i][1][0] * t + destinationLines[i][1][0] * (1 - t)
-		ptBy = sourceLines[i][1][1] * t + destinationLines[i][1][1] * (1 - t)
+	for i in xrange(len(sourceLines)):
+		ptAx = sourceLines[i][0][0] * (1 - t) + destinationLines[i][0][0] * t
+		ptAy = sourceLines[i][0][1] * (1 - t) + destinationLines[i][0][1] * t
+		ptBx = sourceLines[i][1][0] * (1 - t) + destinationLines[i][1][0] * t
+		ptBy = sourceLines[i][1][1] * (1 - t) + destinationLines[i][1][1] * t
 		newLines.append(((ptAx, ptAy), (ptBx, ptBy)))
 	return newLines
 
@@ -359,6 +357,7 @@ def readLineData(filename):
 	return lineList
 
 import os
+import sys
 import math
 import numpy as np
 import time
@@ -368,7 +367,7 @@ rootDir = "./"
 imageA = "inputa.jpg"
 imageB = "inputb.jpg"
 outVideo = "out.avi"
-framerate = 1
+framerate = 4
 duration = 2.0
 
 imgAFilename = rootDir + imageA
@@ -387,6 +386,7 @@ outvid = cv.CreateVideoWriter(outFilename, 0, framerate, (imgA.width, imgA.heigh
 #check if images are the same size
 if(imgA.width != imgB.width or imgA.height != imgB.height):
 	print "Cannot morph image of different sizes"
+	sys.exit()
 
 morphMain()
 
