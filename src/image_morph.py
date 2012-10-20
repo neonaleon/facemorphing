@@ -3,11 +3,69 @@
 ######################
 
 ################################################################################
+# Function name: vectorSubtraction
+# Description:	Subtracts the x and y components of the two input vectors
+################################################################################
+def vectorSubtraction(vector1, vector2):
+	value = (vector1[0] - vector2[0], vector1[1] - vector2[1])
+	return value
+
+################################################################################
+# Function name: vectorAddition
+# Description:	Adds the x and y components of the two input vectors
+################################################################################
+def vectorAddition(vector1, vector2):
+	value = (vector1[0] + vector2[0], vector1[1] + vector2[1])
+	return value
+
+################################################################################
+# Function name: scalarAddition
+# Description:	Adds the scalar to the x and y components of the input vector
+################################################################################
+def scalarAddition(vector, scalar):
+	value = (vector[0] + scalar, vector[1] + scalar)
+	return value
+
+################################################################################
+# Function name: scalarDivision
+# Description:	Divides the x and y components of the input vector by the scalar
+################################################################################
+def scalarDivision(vector, scalar):
+	value = (vector[0]/scalar, vector[1]/scalar)
+	return value
+
+################################################################################
+# Function name: dotProduct
+# Description:	Calculates the dot product of two input vectors
+################################################################################
+def dotProduct(vector1, vector2):
+	value = vector1[0] * vector2[0] + vector1[1] * vector2[1]
+	return value
+
+################################################################################
+# Function name: magnitude
+# Description:	Calculates the vector magnitude
+################################################################################
+def magnitude(vector):
+	value = math.sqrt(vector[0]*vector[0] + vector[1]*vector[1])
+	return value
+
+################################################################################
 # Function name: perpendicular
 # Description:	Calculates the vector perpendicular to the input vector
 ################################################################################
 def perpendicular(vector):
-	return np.matrix([[-vector[1,0]], [vector[0,0]]])
+	value = (-vector[1], vector[0])
+	return value
+
+################################################################################
+# Function name: scalarMult
+# Description:	Multiplies each the x component and the y component of the vector
+#		by a scalar value
+################################################################################
+def scalarMult(vector, scalar):
+	value = (vector[0]*scalar, vector[1]*scalar)
+	return value
 
 #####################
 #	MORPH FUNCTIONS	#
@@ -28,17 +86,23 @@ def perpendicular(vector):
 #		including frame number and feature lines.
 ################################################################################
 def morphMain():
+	startTime = time.time()
+	cv.WriteFrame(outvid, imgA)
+	
 	#loop through number of frames and call morphing function
-	for i in range(int(framerate * duration) + 1):
-		t = i / framerate * duration
+	for i in range(1, int(framerate * duration)):
+		t = i / (framerate * duration)
 		#calculate interpolated lines
 		interpLines = interpolateLines(aLines, bLines, t)
 
 		#call the morph function and save result into new image
 		morphImage = imageMorph(imgA, imgB, aLines, interpLines, bLines, t)
 		#write the current frame to file
-		cv.writeFrame(outvid, morphImage)
-
+		
+		cv.WriteFrame(outvid, morphImage)
+	cv.WriteFrame(outvid, imgB)
+	print "Execution time:", time.time() - startTime
+	
 ################################################################################
 # Function name: imageMorph
 # Parameters:
@@ -72,18 +136,18 @@ def imageMorph(sourceImage, destinationImage, sourceLines, interpLines, destinat
 	height = sourceImage.height
 
 	#create new blank image
-	output = cv.CreateMat(height, width, cv.CV_8UC3)
+	output = cv.CreateImage((width, height), 8, 3)
 
 	#loop through the pixels of both images
 	for x in range(width):
 		for y in range(height):
 
 			#get pixel values
-			X = np.matrix([[x], [y]]) #get x and y for the current pixel
+			X = (x, y) #get x and y for the current pixel
 
 			#initialize weight and displacement values
-			DSUMA = np.matrix([[0], [0]]) #intialize source displacement sum to 0
-			DSUMB = np.matrix([[0], [0]]) #intialize destination displacement sum to 0
+			DSUMA = [0, 0] #intialize source displacement sum to 0
+			DSUMB = [0, 0] #intialize destination displacement sum to 0
 			weightsum = 0 #intialize source weight sum to 0
 			weightsumB = 0 #intialize destination weight sum to 0
 
@@ -93,7 +157,7 @@ def imageMorph(sourceImage, destinationImage, sourceLines, interpLines, destinat
 				#set the vector for the current line we are warping towards
 				P = interpLines[i][0] #destination line start point
 				Q = interpLines[i][1] #destination line end point
-				PQ = Q - P #define destination line segment
+				PQ = vectorSubtraction(Q, P) #define destination line segment
 
 				#calculate the u and v to warp the destination image
 				u = calcU(X, P, Q) #u is the value along the feature line
@@ -114,40 +178,42 @@ def imageMorph(sourceImage, destinationImage, sourceLines, interpLines, destinat
 				Xprime2 = calcXPrime(Pprime2, Qprime2, u, v)
 
 				#find how far new pixels are from current pixels in the source and destination images
-				displacement = Xprime - X #source image displacement
-				displacement2 = Xprime2 - X #destination image displacement
+				displacement = vectorSubtraction(Xprime, X) #source image displacement
+				displacement2 = vectorSubtraction(Xprime2, X) #destination image displacement
 
 				#check to see if the effect of u
 				#if u is greater than 1, distance is the length of the line from the pixel to the end point
 				if(u >= 1):
-					dist = la.norm(Q - X)
+					QX = vectorSubtraction(Q, X)
+					dist = magnitude(QX)
 				#if u is less than 0, distance is the length of the line from the pixel to the start point
 				elif(u <= 0):
-					dist = la.norm(P - X)
+					PX = vectorSubtraction(P, X)
+					dist = magnitude(PX)
 				#otherwise distance is absolute value of v
 				else:
 					dist = abs(v)
 
 				#find out contribution of current line to pixel warping
 				#determine new xy's contribution based on its distance from the line
-				length = la.norm(PQ) #length of current line
+				length = magnitude(PQ) #length of current line
 				weight = math.pow(length, p)/(a + dist)
 				weight = math.pow(weight, b) #weight of current line
 
 				#add the displacement sum for source and destination
-				DSUMA += displacement * weight
-				DSUMB = displacement2 * weight
+				DSUMA = vectorAddition(DSUMA, scalarMult(displacement, weight))
+				DSUMB = vectorAddition(DSUMB, scalarMult(displacement2, weight))
 
 				#add weight to weightsume
 				weightsum += weight
 
 				#adjust displacement sum by weightsum
-				DSUMweightsum = DSUMA / weightsum
-				DSUMweightsum2 = DSUMB / weightsum
+				DSUMweightsum = scalarDivision(DSUMA, weightsum)
+				DSUMweightsum2 = scalarDivision(DSUMB, weightsum)
 
 				#adjust new source and destination pixels by displacement sums
-				Xprime = X + DSUMweightsum
-				Xprime2 = X + DSUMweightsum2
+				Xprime = vectorAddition(X, DSUMweightsum)
+				Xprime2 = vectorAddition(X, DSUMweightsum2)
 
 				#get x and y values for new source pixel
 				newSourceX = int(Xprime[0])
@@ -159,25 +225,25 @@ def imageMorph(sourceImage, destinationImage, sourceLines, interpLines, destinat
 
 				#if new source xy in range of source image, get that pixel
 				if(newSourceX in range(width) and newSourceY in range(height)):
-					sourcePixel = sourceImage[newSourceX, newSourceY]
+					sourcePixel = sourceImage[newSourceY, newSourceX]
 				#otherwise get current source image pixel
 				else:
-					sourcePixel = sourceImage[x, y]
+					sourcePixel = sourceImage[y, x]
 
 				#if new destination xy in range of destination image, get that pixel
 				if(newDestinationX in range(width) and newDestinationY in range(height)):
-					destPixel = destinationImage[newDestinationX, newDestinationY]
+					destPixel = destinationImage[newDestinationY, newDestinationX]
 				#otherwise get current destination image pixel
 				else:
-					destPixel = destinationImage[x, y]
+					destPixel = destinationImage[y, x]
 
 				#cross-dissolve source and destination images by the current weights due to current frame number
-				r = sourcePixel[0]*t + destPixel[0]*(1-t)
-				g = sourcePixel[1]*t + destPixel[1]*(1-t)
-				b = sourcePixel[2]*t + destPixel[2]*(1-t)
+				pxR = sourcePixel[0]*t + destPixel[0]*(1-t)
+				pxG = sourcePixel[1]*t + destPixel[1]*(1-t)
+				pxB = sourcePixel[2]*t + destPixel[2]*(1-t)
 	
 				#set the new image's pixel to the cross-dissolved, warped pixel color
-				output[x, y] = [r, g, b]
+				output[y, x] = (pxR, pxG, pxB)
 
 
 	#return the result
@@ -205,9 +271,11 @@ def interpolateLines(sourceLines, destinationLines, t):
 	newLines = []
 
 	for i in range(len(sourceLines)):
-		ptA = sourceLines[i][0] * t + destinationLines[i][0] * (1 - t)
-		ptB = sourceLines[i][1] * t + destinationLines[i][1] * (1 - t)
-		newLines.append((ptA, ptB))
+		ptAx = sourceLines[i][0][0] * t + destinationLines[i][0][0] * (1 - t)
+		ptAy = sourceLines[i][0][1] * t + destinationLines[i][0][1] * (1 - t)
+		ptBx = sourceLines[i][1][0] * t + destinationLines[i][1][0] * (1 - t)
+		ptBy = sourceLines[i][1][1] * t + destinationLines[i][1][1] * (1 - t)
+		newLines.append(((ptAx, ptAy), (ptBx, ptBy)))
 	return newLines
 
 
@@ -226,13 +294,13 @@ def interpolateLines(sourceLines, destinationLines, t):
 #		out of the range of the image dimensions, the current value is used
 ################################################################################
 def calcXPrime(Pprime, Qprime, u, v):
-	QprimePprime = Qprime - Pprime
+	QprimePprime = vectorSubtraction(Qprime, Pprime)
 	QprimePprimePerp = perpendicular(QprimePprime)
-	top = QprimePprimePerp * v
-	bottom = la.norm(QprimePprime)
-	last = top / bottom
-	mid = QprimePprime * u
-	value = np.matrix([[Pprime[0,0] + mid[0,0] + last[0,0]], [Pprime[1,0] + mid[1,0] + last[1,0]]])
+	top = scalarMult(QprimePprimePerp, v)
+	bottom = magnitude(QprimePprime)
+	last = scalarDivision(top, bottom)
+	mid = scalarMult(QprimePprime, u)
+	value = [(Pprime[0] + mid[0] + last[0]), (Pprime[1] + mid[1] + last[1])]
 	return value
 
 ################################################################################
@@ -249,10 +317,10 @@ def calcXPrime(Pprime, Qprime, u, v):
 #		0 and 1 if it lies along the line, otherwise u is outside the range
 ################################################################################
 def calcU(X, P, Q):
-	XP = P - X
-	PQ = P - Q
-	top = np.dot(XP.T, PQ)
-	bottom = np.dot(PQ.T, PQ)
+	XP = vectorSubtraction(X, P)
+	PQ = vectorSubtraction(Q, P)
+	top = dotProduct(XP, PQ)
+	bottom = magnitude(PQ)*magnitude(PQ)
 	value = top/bottom
 	return value	
 
@@ -270,11 +338,11 @@ def calcU(X, P, Q):
 #		various vector operations
 ################################################################################
 def calcV(X, P, Q):
-	XP = X - P # not p - x?
-	PQ = Q - P
+	XP = vectorSubtraction(X, P)
+	PQ = vectorSubtraction(Q, P)
 	PQperp = perpendicular(PQ)
-	top = np.dot(XP.T, PQperp)
-	bottom = la.norm(PQ)
+	top = dotProduct(XP, PQperp)
+	bottom = magnitude(PQ)
 	value = top/bottom
 	return value
 
@@ -284,23 +352,23 @@ def readLineData(filename):
 	data = np.genfromtxt(lineFile)
 	lineFile.close()
 	lineList = []
-	for (x, y, u ,v) in data:
-		ptA = np.matrix([[x], [y]])
-		ptB = np.matrix([[u], [v]])
+	for x, y, u ,v in data:
+		ptA = (x, y)
+		ptB = (u ,v)
 		lineList.append((ptA, ptB))
 	return lineList
 
 import os
 import math
 import numpy as np
-import numpy.linalg as la
+import time
 import cv2.cv as cv
 
 rootDir = "./"
 imageA = "inputa.jpg"
 imageB = "inputb.jpg"
 outVideo = "out.avi"
-framerate = 24
+framerate = 1
 duration = 2.0
 
 imgAFilename = rootDir + imageA
@@ -325,6 +393,3 @@ morphMain()
 del imgA
 del imgB
 del outvid
-
-
-
