@@ -42,9 +42,9 @@ def redraw_lines(window):
 		b = gui.indexBuffer[i][1]
 		ptA = (int(gui.vertexBuffer[a][0] + 0.5), int(gui.vertexBuffer[a][1] + 0.5)) 
 		ptB = (int(gui.vertexBuffer[b][0] + 0.5), int(gui.vertexBuffer[b][1] + 0.5)) 
-		cv.Circle(window.framebuffer, ptA, 2, markcolor, marktype)
-		cv.Circle(window.framebuffer, ptB, 2, markcolor, marktype)
-		cv.Line(window.framebuffer, ptA, ptB, markcolor, 2)
+		cv.Circle(window.framebuffer, ptA, 1, markcolor, marktype)
+		cv.Circle(window.framebuffer, ptB, 1, markcolor, marktype)
+		cv.Line(window.framebuffer, ptA, ptB, markcolor, 1)
 		cv.PutText(window.framebuffer, str(i + 1), (int(ptA[0] + 5), int(ptA[1] + 5)), font, markcolor)
 	cv.ShowImage(window.winname, window.framebuffer)
 
@@ -69,12 +69,12 @@ def window_mouse_callback(event, x, y, flags, param):
 			return
 		
 		# Add new point into vertex buffer if it is sufficiently far
-		currPtIndex = search_point(gui.vertexBuffer, x, y, 15)
+		currPtIndex = search_point(gui.vertexBuffer, x, y, 5)
 		if currPtIndex == -1:
 			criteria = (cv.CV_TERMCRIT_ITER | cv.CV_TERMCRIT_EPS, 30, 0.01)
 			[(fx, fy)] = cv.FindCornerSubPix(window.gray, [(x, y)], (4, 4), (0, 0), criteria)
 			gui.vertexBuffer.append((fx, fy))
-			cv.Circle(window.framebuffer, (int(fx + 0.5), int(fy + 0.5)), 2, markcolor, marktype)
+			cv.Circle(window.framebuffer, (int(fx + 0.5), int(fy + 0.5)), 1, markcolor, marktype)
 			cv.ShowImage(window.winname, window.framebuffer)
 			currPtIndex = len(gui.vertexBuffer) - 1
 		elif currPtIndex == gui.prevPt:
@@ -141,10 +141,14 @@ class GUI:
 		data = np.genfromtxt(lineFilename)
 		lineFile.close()
 		for i in range(len(data)):
-			self.vertexBuffer.append((data[i, 0], data[i, 1]))
-			self.vertexBuffer.append((data[i, 2], data[i, 3]))
 			ptA = search_point(self.vertexBuffer, data[i, 0], data[i, 1], 1)
 			ptB = search_point(self.vertexBuffer, data[i, 2], data[i, 3], 1)
+			if ptA <= -1:
+				self.vertexBuffer.append((data[i, 0], data[i, 1]))
+				ptA = len(self.vertexBuffer) - 1
+			if ptB <= -1:
+				self.vertexBuffer.append((data[i, 2], data[i, 3]))
+				ptB = len(self.vertexBuffer) - 1
 			self.indexBuffer.append((ptA, ptB))
 		
 	def save_points(self, lineFilename):
