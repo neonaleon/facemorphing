@@ -353,9 +353,7 @@ static void InitGlew()
 
 	// Make sure necessary OpenGL extensions are supported.
 	if ( !GLEW_ARB_texture_float || 
-		!GLEW_EXT_framebuffer_object || 
-		!GLEW_ARB_texture_rectangle ||
-		!GLEW_EXT_gpu_shader4 )
+		!GLEW_ARB_texture_rectangle)
 	{
 		fprintf( stderr, "Error: Some necessary OpenGL extensions are not supported.\n" );
 		char ch; scanf( "%c", &ch ); // Prevents the console window from closing.

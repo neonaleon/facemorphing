@@ -1,7 +1,7 @@
 // The GL_EXT_gpu_shader4 extension extends GLSL 1.10 with 
 // 32-bit integer (int) representation, integer bitwise operators, 
 // and the modulus operator (%).
-#extension GL_EXT_gpu_shader4 : require
+// #extension GL_EXT_gpu_shader4 : require
 #extension GL_ARB_texture_rectangle : require
 
 uniform sampler2DRect TexA;		// Input texture A
