@@ -11,15 +11,16 @@ uniform sampler2DRect ALines;	// Input texture A
 uniform sampler2DRect BLines;	// Input texture B
 
 uniform float Step;
-uniform int LineCount;
-uniform int TexWidth;
-uniform int TexHeight;
-uniform int BlendType;
+uniform float LineCount;
+uniform float TexWidth;
+uniform float TexHeight;
+uniform float BlendType;
 
 const float a = 0.5;			// smoothness of warping
 const float b = 3.25;			// relative line strength
 const float p = 0.25;
 
+const float Epsilon = 0.0000001;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Function name: calcXPrime
@@ -87,7 +88,7 @@ float calcV(vec2 X, vec2 P, vec2 Q)
 
 void main()
 {
-	float weightsum = 0;
+	float weightsum = 0.0;
 	vec2 dsumA, dsumB;
 	dsumA = dsumB = vec2(0);
 
@@ -110,9 +111,9 @@ void main()
 		vec2 displacementB = XprimeB - gl_FragCoord.xy;
 
 		float dist;
-		if(uv.x > 1)
+		if(uv.x > 1.0)
 			dist = distance(Q, gl_FragCoord.xy);
-		else if(uv.x < 0)
+		else if(uv.x < 0.0)
 			dist = distance(P, gl_FragCoord.xy);
 		else
 			dist = abs(uv.y);
@@ -130,19 +131,19 @@ void main()
 	vec2 XprimeB = gl_FragCoord.xy + dsumB / weightsum;
 
 	vec4 startPixel, endPixel;
-	if(XprimeA.x >= 0 && XprimeA.x < TexWidth && XprimeA.y >= 0 && XprimeA.y < TexHeight)
+	if(XprimeA.x >= 0.0 && XprimeA.x < TexWidth && XprimeA.y >= 0.0 && XprimeA.y < TexHeight)
 		startPixel = texture2DRect(TexA, vec2(XprimeA.x, TexHeight - XprimeA.y));
 	else
 		startPixel = texture2DRect(TexA, vec2(gl_FragCoord.x, TexHeight - gl_FragCoord.y));
 
-	if(XprimeB.x >= 0 && XprimeB.x < TexWidth && XprimeB.y >= 0 && XprimeB.y < TexHeight)
+	if(XprimeB.x >= 0.0 && XprimeB.x < TexWidth && XprimeB.y >= 0.0 && XprimeB.y < TexHeight)
 		endPixel = texture2DRect(TexB, vec2(XprimeB.x, TexHeight - XprimeB.y));
 	else
 		endPixel = texture2DRect(TexB, vec2(gl_FragCoord.x, TexHeight - gl_FragCoord.y));
 
-	if(BlendType == 0)
+	if(abs(BlendType) < Epsilon)
 		gl_FragColor = mix(startPixel, endPixel, Step);
-	else if(BlendType == 1)
+	else if(abs(BlendType - 1.0) <= Epsilon)
 		gl_FragColor = startPixel;
 	else
 		gl_FragColor = endPixel;

@@ -168,7 +168,7 @@ static void onRender()
 	GLint uniStep = glGetUniformLocation( shaderProg, "Step" );
 	glUniform1f( uniStep, t );
 	GLint uniBlendType = glGetUniformLocation( shaderProg, "BlendType" );
-	glUniform1i( uniBlendType, blendType );
+	glUniform1f( uniBlendType, (float)blendType );
 
 	// Render quads
 	glBegin( GL_QUADS );
@@ -229,9 +229,9 @@ static void InitTexture( IplImage* imgA, IplImage* imgB )
 	GLint uniTexB = glGetUniformLocation( shaderProg, "TexB" );
 	glUniform1i( uniTexB, 1 );
 	GLint uniTexWidthLoc = glGetUniformLocation( shaderProg, "TexWidth" );
-	glUniform1i( uniTexWidthLoc, imgWidth );
+	glUniform1f( uniTexWidthLoc, (float)imgWidth );
 	GLint uniTexHeightLoc = glGetUniformLocation( shaderProg, "TexHeight" );
-	glUniform1i( uniTexHeightLoc, imgHeight );
+	glUniform1f( uniTexHeightLoc, (float)imgHeight );
 
 	// Upload line A to GPU
 	glActiveTexture( GL_TEXTURE2 );
@@ -265,7 +265,7 @@ static void InitTexture( IplImage* imgA, IplImage* imgB )
 	GLint uniLineB = glGetUniformLocation( shaderProg, "BLines" );
 	glUniform1i( uniLineB, 3 );
 	GLint uniLineCount = glGetUniformLocation( shaderProg, "LineCount" );
-	glUniform1i( uniLineCount, numLines );
+	glUniform1f( uniLineCount, (float)numLines );
 
 	//-----------------------------------------------------------------------------
 	// Attach the two textures to a FBO.
@@ -352,10 +352,19 @@ static void InitGlew()
 	}
 
 	// Make sure necessary OpenGL extensions are supported.
-	if ( !GLEW_ARB_texture_float || 
-		!GLEW_ARB_texture_rectangle)
+	bool extSupported = true;
+	if ( !GLEW_ARB_texture_float)
 	{
-		fprintf( stderr, "Error: Some necessary OpenGL extensions are not supported.\n" );
+		fprintf( stderr, "Error: Float textures not supported.\n" );
+		extSupported = false;
+	}
+	if ( !GLEW_ARB_texture_rectangle)
+	{
+		fprintf( stderr, "Error: Texture rectangles not supported.\n" );
+		extSupported = false;
+	}
+	if ( !extSupported)
+	{
 		char ch; scanf( "%c", &ch ); // Prevents the console window from closing.
 		exit( 1 );
 	}
