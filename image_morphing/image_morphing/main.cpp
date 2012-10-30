@@ -36,7 +36,7 @@ static GLuint glutWindowHandle;
 int imgWidth, imgHeight;
 
 // Texture image handle
-GLuint texA, texB, texLineA, texLineB;
+GLuint texA, texB, texLineA, texLineB, morphedTexObj;
 
 // Deug stuff
 //GLuint outputTex;
@@ -46,18 +46,22 @@ GLuint texA, texB, texLineA, texLineB;
 int numLines;
 float* lineA;
 float* lineB;
+float* lineInterp;
 
 int frameNumber, frameTotal;
 int blendType;
 bool isPlaying;
 int playDirection;
 int lastTime;
+bool showDebugLines;
 
 // Forward declarations
 static bool CheckFramebufferStatus();
 static void onRender();
 static void onUpdate(int value);
-
+static void interpolateLines(float* src, float* dest, float* out, int size, float t);
+static void MakeMorphImage(float t);
+static void drawLines(float t);
 
 //---------------------------------------------------------------------------
 // Keyboard callback function
@@ -105,6 +109,12 @@ void onKeyPress( unsigned char key, int x, int y )
 		glutPostRedisplay();
 		break;
 
+	case 'l':
+	case 'L':
+		showDebugLines = !showDebugLines;
+		glutPostRedisplay();
+		break;
+
 		// Quit program.
 	case 'q':
 	case 'Q': 
@@ -134,16 +144,6 @@ static void onUpdate(int value)
 //---------------------------------------------------------------------------
 static void onRender()
 {
-	// Bind texture to texture units
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texA);
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, texB);
-	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, texLineA);
-	glActiveTexture(GL_TEXTURE3);
-	glBindTexture(GL_TEXTURE_2D, texLineB);
-
 	// Calculate frame position and thus t
 	int currentTime = glutGet(GLUT_ELAPSED_TIME);
 	int elapsed = currentTime - lastTime;
@@ -164,19 +164,20 @@ static void onRender()
 	}
 	t = float(frameNumber) / frameTotal;
 
-	// Set shader uniform vars
-	GLint uniStep = glGetUniformLocation( shaderProg, "Step" );
-	glUniform1f( uniStep, t );
-	GLint uniBlendType = glGetUniformLocation( shaderProg, "BlendType" );
-	glUniform1f( uniBlendType, (float)blendType );
-
-	// Render quads
+	// Render morphed image
+	MakeMorphImage(t);
+	//glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+	glBindTexture( GL_TEXTURE_2D, morphedTexObj );
 	glBegin( GL_QUADS );
 	glVertex2f( 0, 0 );
 	glVertex2f( 0, imgHeight );
 	glVertex2f( imgWidth, imgHeight );
 	glVertex2f( imgWidth, 0 );
 	glEnd();
+
+	// Render debug lines
+	if(showDebugLines)
+		drawLines(t);
 
 	glutSwapBuffers();
 	lastTime = currentTime;
@@ -266,6 +267,14 @@ static void InitTexture( IplImage* imgA, IplImage* imgB )
 	glUniform1i( uniLineB, 3 );
 	GLint uniLineCount = glGetUniformLocation( shaderProg, "LineCount" );
 	glUniform1f( uniLineCount, (float)numLines );
+
+	// Create intermediate debug line
+	glGenTextures( 1, &morphedTexObj );
+	glBindTexture( GL_TEXTURE_2D, morphedTexObj );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
 
 	//-----------------------------------------------------------------------------
 	// Attach the two textures to a FBO.
@@ -430,6 +439,9 @@ static void InitLine()
 		exit( 1 );
 	}
 	numLines = linesB.size() / 4;
+
+	// Create buffer for interpolated lines
+	lineInterp = new float[numLines * 4];
 }
 
 int main(int argc, char* argv[])
@@ -440,6 +452,7 @@ int main(int argc, char* argv[])
 	frameTotal = frameRate * duration;
 	isPlaying = false;
 	playDirection = 1;
+	showDebugLines = false;
 
 	// Load images
 	IplImage* imgA = cvLoadImage(imgAFilename, CV_LOAD_IMAGE_UNCHANGED);
@@ -461,12 +474,69 @@ int main(int argc, char* argv[])
 	printf( "Press and hold 'A/D' to control morphing\n" );
 	printf( "Press 'T' to morph between faces\n" );
 	printf( "Press 'X' to toggle between blending\n(Cross-dissolve, source only, destination only)\n" );
+	printf( "Press 'L' to show lines\n" );
 	printf( "Press 'Q' to quit.\n\n" );
 
 	glutMainLoop();
 	return 0;
 }
 
+static void MakeMorphImage(float t)
+{
+	// Enable morphing shader
+	glUseProgram( shaderProg );
+
+	glClear( GL_COLOR_BUFFER_BIT );
+
+	// Bind texture to texture units
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, texA);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, texB);
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, texLineA);
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_2D, texLineB);
+
+	// Set shader uniform vars
+	GLint uniStep = glGetUniformLocation( shaderProg, "Step" );
+	glUniform1f( uniStep, t );
+	GLint uniBlendType = glGetUniformLocation( shaderProg, "BlendType" );
+	glUniform1f( uniBlendType, (float)blendType );
+
+	// Render quads
+	glBegin( GL_QUADS );
+	glVertex2f( 0, 0 );
+	glVertex2f( 0, imgHeight );
+	glVertex2f( imgWidth, imgHeight );
+	glVertex2f( imgWidth, 0 );
+	glEnd();
+
+	// Copy the framebuffer pixels to the texture
+	glBindTexture(GL_TEXTURE_2D, morphedTexObj);
+	glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 0, 0, imgWidth, imgHeight, 0);
+}
+
+static void drawLines(float t)
+{
+	interpolateLines(lineA, lineB, lineInterp, numLines, t);
+
+	glUseProgram(NULL);
+
+	glBegin(GL_LINES);
+	for(int i=0; i<numLines; i++)
+	{
+		glVertex2f(lineInterp[i*4], lineInterp[i*4+1]);
+		glVertex2f(lineInterp[i*4+2], lineInterp[i*4+3]);
+	}
+	glEnd();
+}
+
+static void interpolateLines(float* src, float* dest, float* out, int size, float t)
+{
+	for (int i=0; i<size*4; i++)
+		out[i] = src[i] * (1-t) + dest[i] * t;
+}
 
 //---------------------------------------------------------------------------
 // Check framebuffer status.
