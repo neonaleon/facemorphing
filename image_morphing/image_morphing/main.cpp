@@ -58,6 +58,15 @@ static bool CheckFramebufferStatus();
 static void onRender();
 static void onUpdate(int value);
 
+// Video Write
+const char* output_video_filename = "outvid.avi";
+const int codec = 0;
+const double video_fps = 24;
+
+void openVideoWriter()
+{
+
+}
 
 //---------------------------------------------------------------------------
 // Keyboard callback function
