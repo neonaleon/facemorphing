@@ -1,7 +1,7 @@
 /////////////////////////////////////////////////////////////////////////////
 // Image morphing program
 //
-// Author: Daniel Seah
+// Author: Daniel Seah, Leon Ho
 /////////////////////////////////////////////////////////////////////////////
 
 // Program paramters
@@ -42,10 +42,11 @@ float imgScale;
 
 // Texture image handle
 GLuint texA, texB, texLineA, texLineB, morphedTexObj;
+GLuint fbo;
 
 // Deug stuff
 //GLuint outputTex;
-//float* outputArray;
+//char* outputArray;
 
 // Line lists
 int numLines;
@@ -60,8 +61,7 @@ int playDirection;
 int lastTime;
 bool showDebugLines;
 
-// Video Writer
-// done by: Leon Ho
+// Video Writer stuff
 const int codec = 0;
 CvVideoWriter* vidw = NULL;
 bool isRendering;
@@ -161,6 +161,7 @@ void writeTexToVideo()
 	char* imageData = new char[imgWidth * imgHeight * 3];
 
 	glFinish();
+	glBindTexture(GL_TEXTURE_2D, morphedTexObj);
 	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 	glGetTexImage(GL_TEXTURE_2D, 0, GL_BGR, GL_UNSIGNED_BYTE, imageData);
 	
@@ -177,8 +178,7 @@ static void writeVideo()
 
 	for(int i=0; i<=frameTotal; i++)
 	{
-		frameNumber = i;
-		onRender();
+		MakeMorphImage(float(i) / frameTotal);
 		writeTexToVideo();
 	}
 	cvReleaseVideoWriter(&vidw);
@@ -233,7 +233,8 @@ static void onRender()
 
 	// Reset GL states
 	glUseProgram(NULL);
-	glClearColor(1, 1, 1, 1);
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+	glClearColor(0.243, 0.243, 0.243, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
 	glEnable(GL_TEXTURE_2D);
 
@@ -334,37 +335,35 @@ static void InitTexture( IplImage* imgA, IplImage* imgB )
 	glUniform1f( uniLineCount, (float)numLines );
 
 	// Create image output texture
-	glActiveTexture( GL_TEXTURE0 );
+	glActiveTexture( GL_TEXTURE4 );
 	glGenTextures( 1, &morphedTexObj );
 	glBindTexture( GL_TEXTURE_2D, morphedTexObj );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB8,
+		imgWidth, imgHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL );
+	printOpenGLError();
 
 	//-----------------------------------------------------------------------------
-	// Attach the two textures to a FBO.
+	// Attach the textures to a FBO
 	//-----------------------------------------------------------------------------
-	/*glActiveTexture( GL_TEXTURE4 );
-	glGenTextures( 1, &outputTex );
-	glBindTexture( GL_TEXTURE_RECTANGLE_ARB, outputTex );
-	glTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_S, GL_CLAMP );
-	glTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP );
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glTexImage2D( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA32F_ARB,
-		imgWidth, imgHeight, 0, GL_RGBA, GL_FLOAT, NULL );
-	printOpenGLError();
-	GLuint fbo;
 	glGenFramebuffersEXT( 1, &fbo ); 
 	glBindFramebufferEXT( GL_FRAMEBUFFER_EXT, fbo );
-
 	glFramebufferTexture2DEXT( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, 
-		GL_TEXTURE_RECTANGLE_ARB, outputTex, 0 );
+		GL_TEXTURE_RECTANGLE_ARB, texA, 0 );
+	glFramebufferTexture2DEXT( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT1_EXT, 
+		GL_TEXTURE_RECTANGLE_ARB, texB, 0 );
+	glFramebufferTexture2DEXT( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT2_EXT, 
+		GL_TEXTURE_RECTANGLE_ARB, texLineA, 0 );
+	glFramebufferTexture2DEXT( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT3_EXT, 
+		GL_TEXTURE_RECTANGLE_ARB, texLineB, 0 );
+	glFramebufferTexture2DEXT( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT4_EXT, 
+		GL_TEXTURE_2D, morphedTexObj, 0 );
 	CheckFramebufferStatus();
 	printOpenGLError();
-	glDrawBuffer( GL_COLOR_ATTACHMENT0_EXT );*/
 };
 
 //---------------------------------------------------------------------------
@@ -441,6 +440,11 @@ static void InitGlew()
 	if ( !GLEW_ARB_texture_rectangle)
 	{
 		fprintf( stderr, "Error: Texture rectangles not supported.\n" );
+		extSupported = false;
+	}
+	if ( !GLEW_ARB_framebuffer_object)
+	{
+		fprintf( stderr, "Error: Framebuffer objects not supported.\n" );
 		extSupported = false;
 	}
 	if ( !extSupported)
@@ -556,6 +560,9 @@ int main(int argc, char* argv[])
 
 static void MakeMorphImage(float t)
 {
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, fbo);
+	glDrawBuffer( GL_COLOR_ATTACHMENT4_EXT );
+
 	// Set up projection, modelview matrices and viewport.
 	glMatrixMode( GL_PROJECTION );
 	glLoadIdentity();
@@ -566,18 +573,6 @@ static void MakeMorphImage(float t)
 
 	// Enable morphing shader
 	glUseProgram( morphProg );
-
-	glClear( GL_COLOR_BUFFER_BIT );
-
-	// Bind texture to texture units
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texA);
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, texB);
-	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, texLineA);
-	glActiveTexture(GL_TEXTURE3);
-	glBindTexture(GL_TEXTURE_2D, texLineB);
 
 	// Set shader uniform vars
 	GLint uniStep = glGetUniformLocation( morphProg, "Step" );
@@ -592,11 +587,6 @@ static void MakeMorphImage(float t)
 		glVertex2f( imgWidth, imgHeight );
 		glVertex2f( imgWidth, 0 );
 	glEnd();
-
-	// Copy the framebuffer pixels to the texture
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, morphedTexObj);
-	glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 0, 0, imgWidth, imgHeight, 0);
 }
 
 static void drawMorphImage()
@@ -605,7 +595,7 @@ static void drawMorphImage()
 	int bottomBorder = (winHeight - imgScale * imgHeight) / 2.0f;
 
 	glActiveTexture( GL_TEXTURE0 );
-	glBindTexture( GL_TEXTURE_2D, morphedTexObj );
+	glBindTexture( GL_TEXTURE_2D, morphedTexObj);
 	glBegin( GL_QUADS );
 		glTexCoord2f(0, 0);
 		glVertex2f(leftBorder, bottomBorder);
