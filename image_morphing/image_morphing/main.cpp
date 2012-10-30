@@ -9,6 +9,7 @@ const char* imgAFilename = "inputa.jpg";
 const char* imgBFilename = "inputb.jpg";
 const char* lineAFilename = "inputa.mld";
 const char* lineBFilename = "inputb.mld";
+const char* output_video_filename = "outvid.avi";
 const int frameRate = 24;
 const int duration = 3;
 
@@ -29,11 +30,15 @@ using namespace cv;
 using namespace std;
 
 // Shader program object.
-static GLuint shaderProg;
+static GLuint morphProg;
 
 // GLUT window handle.
 static GLuint glutWindowHandle;
+
 int imgWidth, imgHeight;
+int winWidth = 1024;
+int winHeight = 768;
+float imgScale;
 
 // Texture image handle
 GLuint texA, texB, texLineA, texLineB, morphedTexObj;
@@ -55,72 +60,43 @@ int playDirection;
 int lastTime;
 bool showDebugLines;
 
+// Video Writer
+// done by: Leon Ho
+const int codec = 0;
+CvVideoWriter* vidw = NULL;
+bool isRendering;
+
 // Forward declarations
 static bool CheckFramebufferStatus();
 static void onRender();
 static void onUpdate(int value);
-
 static void interpolateLines(float* src, float* dest, float* out, int size, float t);
 static void MakeMorphImage(float t);
 static void drawLines(float t);
-
-// Video Writer
-// done by: Leon Ho
-const char* output_video_filename = "outvid.avi";
-const int codec = 0;
-const int video_fps = 5;
-bool vidOpened = false;
-CvVideoWriter* vidw = NULL;
-
-void openVideoWriter()
-{
-	cout << "Open Video Writer" << endl;
-	vidw = cvCreateVideoWriter(output_video_filename, codec, video_fps, Size(imgWidth, imgHeight));
-	vidOpened = true;
-}
-
-void closeVideoWriter()
-{
-	cout << "Close Video Writer" << endl;
-	cvReleaseVideoWriter(&vidw);
-	vidOpened = false;
-}
-
-void writeTexToVideo()
-{
-	if (vidOpened){
-		CvSize size;
-		size.height = imgHeight;
-		size.width = imgWidth;
-
-		char* imageData = new char[imgWidth * imgHeight * 3];
-		glPixelStorei( GL_PACK_ALIGNMENT, 1 );
-		glReadBuffer( GL_BACK );
-		glReadPixels( 0, 0, imgWidth, imgHeight, GL_BGR, GL_UNSIGNED_BYTE, imageData );
-
-		IplImage* renderedImage = cvCreateImageHeader(size, IPL_DEPTH_8U, 3);
-		renderedImage->imageData = imageData;
-		renderedImage->imageDataOrigin = renderedImage->imageData;
-		cvFlip(renderedImage, 0);
-		cvWriteFrame(vidw, renderedImage);
-	}
-}
+static void onResize(int w, int h);
+static void drawMorphImage();
+static void writeVideo();
 
 //---------------------------------------------------------------------------
 // Keyboard callback function
 //---------------------------------------------------------------------------
 void onKeyPress( unsigned char key, int x, int y )
 {
+	if(isRendering)
+		return;
+
 	switch ( key )
 	{
 	case 'r':
 	case 'R':
-		openVideoWriter();
+		isRendering = true;
 		isPlaying = !isPlaying;
-		lastTime =  glutGet(GLUT_ELAPSED_TIME);
-		playDirection = 1;
-		glutTimerFunc(500.0f / frameRate, onUpdate, 0);	// Nyquist magic
+		printf("Rendering to %s...\nDo not close window!\n", output_video_filename);
+		writeVideo();
+		isRendering = false;
+		printf("Render complete\n");
 		break;
+
 	case 't':
 	case 'T':
 		isPlaying = !isPlaying;
@@ -129,7 +105,7 @@ void onKeyPress( unsigned char key, int x, int y )
 			playDirection = 1;
 		else if(frameNumber >= frameTotal)
 			playDirection = -1;
-		glutTimerFunc(500.0f / frameRate, onUpdate, 0);	// Nyquist magic
+		glutTimerFunc(1000.0f / frameRate, onUpdate, 0);	// Nyquist magic
 		break;
 
 	case 'x':
@@ -176,6 +152,37 @@ void onKeyPress( unsigned char key, int x, int y )
 	}
 }
 
+void writeTexToVideo()
+{
+	CvSize size;
+	size.height = imgHeight;
+	size.width = imgWidth;
+
+	char* imageData = new char[imgWidth * imgHeight * 3];
+
+	glFinish();
+	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+	glGetTexImage(GL_TEXTURE_2D, 0, GL_BGR, GL_UNSIGNED_BYTE, imageData);
+	
+	IplImage* renderedImage = cvCreateImageHeader(size, IPL_DEPTH_8U, 3);
+	renderedImage->imageData = imageData;
+	renderedImage->imageDataOrigin = renderedImage->imageData;
+	cvFlip(renderedImage, 0);
+	cvWriteFrame(vidw, renderedImage);
+}
+
+static void writeVideo()
+{
+	vidw = cvCreateVideoWriter(output_video_filename, codec, frameRate, Size(imgWidth, imgHeight));
+
+	for(int i=0; i<=frameTotal; i++)
+	{
+		frameNumber = i;
+		onRender();
+		writeTexToVideo();
+	}
+	cvReleaseVideoWriter(&vidw);
+}
 
 //---------------------------------------------------------------------------
 // Update loop
@@ -198,7 +205,6 @@ static void onRender()
 	// Calculate frame position and thus t
 	int currentTime = glutGet(GLUT_ELAPSED_TIME);
 	int elapsed = currentTime - lastTime;
-	float t = frameNumber;
 	if(isPlaying)
 	{
 		frameNumber += elapsed / 1000.0f * playDirection *frameRate;
@@ -206,38 +212,40 @@ static void onRender()
 		{
 			frameNumber = 0;
 			isPlaying = false;
-			closeVideoWriter();
 		}
 		if(frameNumber > frameTotal)
 		{
 			frameNumber = frameTotal;
 			isPlaying = false;
-			closeVideoWriter();
 		}
 	}
-	t = float(frameNumber) / frameTotal;
+	float t = float(frameNumber) / frameTotal;
+
+	MakeMorphImage(t);
+
+	// Reset projection, modelview matrices and viewport.
+	glMatrixMode( GL_PROJECTION );
+	glLoadIdentity();
+	gluOrtho2D( 0, winWidth, 0, winHeight );
+	glMatrixMode( GL_MODELVIEW );
+	glLoadIdentity();
+	glViewport( 0, 0, winWidth, winHeight );
+
+	// Reset GL states
+	glUseProgram(NULL);
+	glClearColor(1, 1, 1, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glEnable(GL_TEXTURE_2D);
 
 	// Render morphed image
-	MakeMorphImage(t);
-	//glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
-	glBindTexture( GL_TEXTURE_2D, morphedTexObj );
-	glBegin( GL_QUADS );
-	glVertex2f( 0, 0 );
-	glVertex2f( 0, imgHeight );
-	glVertex2f( imgWidth, imgHeight );
-	glVertex2f( imgWidth, 0 );
-	glEnd();
+	drawMorphImage();
 
 	// Render debug lines
 	if(showDebugLines)
 		drawLines(t);
 
-	// write tex to video
-	writeTexToVideo();
-
 	glutSwapBuffers();
 	lastTime = currentTime;
-	
 	/*glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 	glReadBuffer( GL_COLOR_ATTACHMENT0_EXT );
 	glReadPixels( 0, 0, imgWidth, imgHeight, GL_RGBA, GL_FLOAT, outputArray );*/
@@ -282,13 +290,13 @@ static void InitTexture( IplImage* imgA, IplImage* imgB )
 	printOpenGLError();
 
 	// Set image parameters
-	GLint uniTexA = glGetUniformLocation( shaderProg, "TexA" );
+	GLint uniTexA = glGetUniformLocation( morphProg, "TexA" );
 	glUniform1i( uniTexA, 0 );
-	GLint uniTexB = glGetUniformLocation( shaderProg, "TexB" );
+	GLint uniTexB = glGetUniformLocation( morphProg, "TexB" );
 	glUniform1i( uniTexB, 1 );
-	GLint uniTexWidthLoc = glGetUniformLocation( shaderProg, "TexWidth" );
+	GLint uniTexWidthLoc = glGetUniformLocation( morphProg, "TexWidth" );
 	glUniform1f( uniTexWidthLoc, (float)imgWidth );
-	GLint uniTexHeightLoc = glGetUniformLocation( shaderProg, "TexHeight" );
+	GLint uniTexHeightLoc = glGetUniformLocation( morphProg, "TexHeight" );
 	glUniform1f( uniTexHeightLoc, (float)imgHeight );
 
 	// Upload line A to GPU
@@ -318,18 +326,19 @@ static void InitTexture( IplImage* imgA, IplImage* imgB )
 	printOpenGLError();
 
 	// Set line parameters
-	GLint uniLineA = glGetUniformLocation( shaderProg, "ALines" );
+	GLint uniLineA = glGetUniformLocation( morphProg, "ALines" );
 	glUniform1i( uniLineA, 2 );
-	GLint uniLineB = glGetUniformLocation( shaderProg, "BLines" );
+	GLint uniLineB = glGetUniformLocation( morphProg, "BLines" );
 	glUniform1i( uniLineB, 3 );
-	GLint uniLineCount = glGetUniformLocation( shaderProg, "LineCount" );
+	GLint uniLineCount = glGetUniformLocation( morphProg, "LineCount" );
 	glUniform1f( uniLineCount, (float)numLines );
 
-	// Create intermediate debug line
+	// Create image output texture
+	glActiveTexture( GL_TEXTURE0 );
 	glGenTextures( 1, &morphedTexObj );
 	glBindTexture( GL_TEXTURE_2D, morphedTexObj );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
 
@@ -367,7 +376,7 @@ static void InitGlut(int argc, char** argv)
 	// Initialize GLUT.
 	glutInit( &argc, argv );
 	glutInitDisplayMode (GLUT_DOUBLE | GLUT_RGB);
-	glutInitWindowSize (imgWidth, imgHeight);
+	glutInitWindowSize (winWidth, winHeight);
 
 	// This creates a OpenGL rendering context so that
 	// we can start to issue OpenGL commands after this.
@@ -381,16 +390,21 @@ static void InitGlut(int argc, char** argv)
 	glDisable( GL_COLOR_LOGIC_OP );
 	glDisable( GL_SCISSOR_TEST );
 	glDisable( GL_STENCIL_TEST );
+	glEnable(GL_TEXTURE_2D);
 	glPolygonMode( GL_FRONT, GL_FILL );
 
-	// Set up projection, modelview matrices and viewport.
-	glMatrixMode( GL_PROJECTION );
-	glLoadIdentity();
-	gluOrtho2D( 0, imgWidth, 0, imgHeight );
-	glMatrixMode( GL_MODELVIEW );
-	glLoadIdentity();
-	glViewport( 0, 0, imgWidth, imgHeight );
+}
 
+void onResize (int w, int h)
+{
+	winWidth = w;
+	winHeight = h;
+
+	imgScale = (float)winWidth / imgWidth;
+	if(winHeight < imgHeight * imgScale)
+		imgScale = (float)winHeight / imgHeight;
+
+	glutPostRedisplay();
 }
 
 //---------------------------------------------------------------------------
@@ -436,8 +450,8 @@ static void InitGlew()
 	}
 
 	// Create shader program object.
-	shaderProg = makeShaderProgramFromFiles( vertShaderFilename, fragShaderFilename, NULL );
-	if ( shaderProg == 0 )
+	morphProg = makeShaderProgramFromFiles( vertShaderFilename, fragShaderFilename, NULL );
+	if ( morphProg == 0 )
 	{
 		fprintf( stderr, "Error: Cannot create shader program object.\n" );
 		char ch; scanf( "%c", &ch ); // Prevents the console window from closing.
@@ -445,7 +459,7 @@ static void InitGlew()
 	}
 
 	// Deploy user-defined shaders.
-	glUseProgram( shaderProg );
+	glUseProgram( morphProg );
 }
 
 //---------------------------------------------------------------------------
@@ -510,6 +524,7 @@ int main(int argc, char* argv[])
 	isPlaying = false;
 	playDirection = 1;
 	showDebugLines = false;
+	isRendering = false;
 
 	// Load images
 	IplImage* imgA = cvLoadImage(imgAFilename, CV_LOAD_IMAGE_UNCHANGED);
@@ -526,6 +541,7 @@ int main(int argc, char* argv[])
 	// Register GLUT callback functions
 	glutDisplayFunc(onRender);
 	glutKeyboardFunc(onKeyPress);
+	glutReshapeFunc(onResize);
 
 	// Display user instructions in console window.
 	printf( "Press and hold 'A/D' to control morphing\n" );
@@ -540,8 +556,16 @@ int main(int argc, char* argv[])
 
 static void MakeMorphImage(float t)
 {
+	// Set up projection, modelview matrices and viewport.
+	glMatrixMode( GL_PROJECTION );
+	glLoadIdentity();
+	gluOrtho2D( 0, imgWidth, 0, imgHeight );
+	glMatrixMode( GL_MODELVIEW );
+	glLoadIdentity();
+	glViewport( 0, 0, imgWidth, imgHeight );
+
 	// Enable morphing shader
-	glUseProgram( shaderProg );
+	glUseProgram( morphProg );
 
 	glClear( GL_COLOR_BUFFER_BIT );
 
@@ -556,35 +580,55 @@ static void MakeMorphImage(float t)
 	glBindTexture(GL_TEXTURE_2D, texLineB);
 
 	// Set shader uniform vars
-	GLint uniStep = glGetUniformLocation( shaderProg, "Step" );
+	GLint uniStep = glGetUniformLocation( morphProg, "Step" );
 	glUniform1f( uniStep, t );
-	GLint uniBlendType = glGetUniformLocation( shaderProg, "BlendType" );
+	GLint uniBlendType = glGetUniformLocation( morphProg, "BlendType" );
 	glUniform1f( uniBlendType, (float)blendType );
 
 	// Render quads
 	glBegin( GL_QUADS );
-	glVertex2f( 0, 0 );
-	glVertex2f( 0, imgHeight );
-	glVertex2f( imgWidth, imgHeight );
-	glVertex2f( imgWidth, 0 );
+		glVertex2f( 0, 0 );
+		glVertex2f( 0, imgHeight );
+		glVertex2f( imgWidth, imgHeight );
+		glVertex2f( imgWidth, 0 );
 	glEnd();
 
 	// Copy the framebuffer pixels to the texture
+	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, morphedTexObj);
-	glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 0, 0, imgWidth, imgHeight, 0);
+	glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 0, 0, imgWidth, imgHeight, 0);
+}
+
+static void drawMorphImage()
+{
+	int leftBorder = (winWidth - imgScale * imgWidth) / 2.0f;
+	int bottomBorder = (winHeight - imgScale * imgHeight) / 2.0f;
+
+	glActiveTexture( GL_TEXTURE0 );
+	glBindTexture( GL_TEXTURE_2D, morphedTexObj );
+	glBegin( GL_QUADS );
+		glTexCoord2f(0, 0);
+		glVertex2f(leftBorder, bottomBorder);
+		glTexCoord2f(0, 1);
+		glVertex2f(leftBorder, bottomBorder + imgHeight * imgScale);
+		glTexCoord2f(1, 1);
+		glVertex2f(leftBorder + imgWidth * imgScale, bottomBorder + imgHeight * imgScale);
+		glTexCoord2f(1, 0);
+		glVertex2f(leftBorder + imgWidth * imgScale, bottomBorder);
+	glEnd();
 }
 
 static void drawLines(float t)
 {
 	interpolateLines(lineA, lineB, lineInterp, numLines, t);
-
-	glUseProgram(NULL);
+	int leftBorder = (winWidth - imgScale * imgWidth) / 2.0f;
+	int bottomBorder = (winHeight - imgScale * imgHeight) / 2.0f;
 
 	glBegin(GL_LINES);
 	for(int i=0; i<numLines; i++)
 	{
-		glVertex2f(lineInterp[i*4], lineInterp[i*4+1]);
-		glVertex2f(lineInterp[i*4+2], lineInterp[i*4+3]);
+		glVertex2f(lineInterp[i*4]*imgScale+leftBorder, lineInterp[i*4+1]*imgScale+bottomBorder);
+		glVertex2f(lineInterp[i*4+2]*imgScale+leftBorder, lineInterp[i*4+3]*imgScale+bottomBorder);
 	}
 	glEnd();
 }
