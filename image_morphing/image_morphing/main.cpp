@@ -60,21 +60,51 @@ static bool CheckFramebufferStatus();
 static void onRender();
 static void onUpdate(int value);
 
-// Video Writer
-// Author: Leon Ho
-const char* output_video_filename = "outvid.avi";
-const int codec = 0;
-const double video_fps = 24;
-
-void openVideoWriter()
-{
-	VideoWriter vidw = VideoWriter(output_video_filename, codec, video_fps, Size(imgWidth, imgHeight));
-}
-
-
 static void interpolateLines(float* src, float* dest, float* out, int size, float t);
 static void MakeMorphImage(float t);
 static void drawLines(float t);
+
+// Video Writer
+// done by: Leon Ho
+const char* output_video_filename = "outvid.avi";
+const int codec = 0;
+const int video_fps = 5;
+bool vidOpened = false;
+CvVideoWriter* vidw = NULL;
+
+void openVideoWriter()
+{
+	cout << "Open Video Writer" << endl;
+	vidw = cvCreateVideoWriter(output_video_filename, codec, video_fps, Size(imgWidth, imgHeight));
+	vidOpened = true;
+}
+
+void closeVideoWriter()
+{
+	cout << "Close Video Writer" << endl;
+	cvReleaseVideoWriter(&vidw);
+	vidOpened = false;
+}
+
+void writeTexToVideo()
+{
+	if (vidOpened){
+		CvSize size;
+		size.height = imgHeight;
+		size.width = imgWidth;
+
+		char* imageData = new char[imgWidth * imgHeight * 3];
+		glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+		glReadBuffer( GL_BACK );
+		glReadPixels( 0, 0, imgWidth, imgHeight, GL_BGR, GL_UNSIGNED_BYTE, imageData );
+
+		IplImage* renderedImage = cvCreateImageHeader(size, IPL_DEPTH_8U, 3);
+		renderedImage->imageData = imageData;
+		renderedImage->imageDataOrigin = renderedImage->imageData;
+		cvFlip(renderedImage, 0);
+		cvWriteFrame(vidw, renderedImage);
+	}
+}
 
 //---------------------------------------------------------------------------
 // Keyboard callback function
@@ -83,6 +113,14 @@ void onKeyPress( unsigned char key, int x, int y )
 {
 	switch ( key )
 	{
+	case 'r':
+	case 'R':
+		openVideoWriter();
+		isPlaying = !isPlaying;
+		lastTime =  glutGet(GLUT_ELAPSED_TIME);
+		playDirection = 1;
+		glutTimerFunc(500.0f / frameRate, onUpdate, 0);	// Nyquist magic
+		break;
 	case 't':
 	case 'T':
 		isPlaying = !isPlaying;
@@ -168,11 +206,13 @@ static void onRender()
 		{
 			frameNumber = 0;
 			isPlaying = false;
+			closeVideoWriter();
 		}
 		if(frameNumber > frameTotal)
 		{
 			frameNumber = frameTotal;
 			isPlaying = false;
+			closeVideoWriter();
 		}
 	}
 	t = float(frameNumber) / frameTotal;
@@ -192,8 +232,12 @@ static void onRender()
 	if(showDebugLines)
 		drawLines(t);
 
+	// write tex to video
+	writeTexToVideo();
+
 	glutSwapBuffers();
 	lastTime = currentTime;
+	
 	/*glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 	glReadBuffer( GL_COLOR_ATTACHMENT0_EXT );
 	glReadPixels( 0, 0, imgWidth, imgHeight, GL_RGBA, GL_FLOAT, outputArray );*/
