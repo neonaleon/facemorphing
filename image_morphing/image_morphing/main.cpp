@@ -35,6 +35,7 @@ static GLuint morphProg;
 // GLUT window handle.
 static GLuint glutWindowHandle;
 
+// Image properties
 int imgWidth, imgHeight;
 int winWidth = 1024;
 int winHeight = 768;
@@ -44,22 +45,19 @@ float imgScale;
 GLuint texA, texB, texLineA, texLineB, morphedTexObj;
 GLuint fbo;
 
-// Deug stuff
-//GLuint outputTex;
-//char* outputArray;
-
 // Line lists
 int numLines;
 float* lineA;
 float* lineB;
 float* lineInterp;
 
-int frameNumber, frameTotal;
+// Program states
 int blendType;
+bool showDebugLines;
 bool isPlaying;
 int playDirection;
+int frameNumber, frameTotal;
 int lastTime;
-bool showDebugLines;
 
 // Video Writer stuff
 const int codec = 0;
@@ -105,7 +103,7 @@ void onKeyPress( unsigned char key, int x, int y )
 			playDirection = 1;
 		else if(frameNumber >= frameTotal)
 			playDirection = -1;
-		glutTimerFunc(1000.0f / frameRate, onUpdate, 0);	// Nyquist magic
+		glutTimerFunc(1000.0f / frameRate, onUpdate, 0);
 		break;
 
 	case 'x':
@@ -233,7 +231,6 @@ static void onRender()
 
 	// Reset GL states
 	glUseProgram(NULL);
-	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 	glClearColor(0.243, 0.243, 0.243, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
 	glEnable(GL_TEXTURE_2D);
@@ -247,9 +244,6 @@ static void onRender()
 
 	glutSwapBuffers();
 	lastTime = currentTime;
-	/*glPixelStorei( GL_PACK_ALIGNMENT, 1 );
-	glReadBuffer( GL_COLOR_ATTACHMENT0_EXT );
-	glReadPixels( 0, 0, imgWidth, imgHeight, GL_RGBA, GL_FLOAT, outputArray );*/
 }
 
 //---------------------------------------------------------------------------
@@ -290,7 +284,7 @@ static void InitTexture( IplImage* imgA, IplImage* imgB )
 		imgWidth, imgHeight, 0, GL_BGR, GL_UNSIGNED_BYTE, imgB->imageData );
 	printOpenGLError();
 
-	// Set image parameters
+	// Set image parameters in shader
 	GLint uniTexA = glGetUniformLocation( morphProg, "TexA" );
 	glUniform1i( uniTexA, 0 );
 	GLint uniTexB = glGetUniformLocation( morphProg, "TexB" );
@@ -326,7 +320,7 @@ static void InitTexture( IplImage* imgA, IplImage* imgB )
 		numLines, 1, 0, GL_RGBA, GL_FLOAT, lineB );
 	printOpenGLError();
 
-	// Set line parameters
+	// Set line parameters in shader
 	GLint uniLineA = glGetUniformLocation( morphProg, "ALines" );
 	glUniform1i( uniLineA, 2 );
 	GLint uniLineB = glGetUniformLocation( morphProg, "BLines" );
@@ -348,19 +342,11 @@ static void InitTexture( IplImage* imgA, IplImage* imgB )
 	printOpenGLError();
 
 	//-----------------------------------------------------------------------------
-	// Attach the textures to a FBO
+	// Attach the output texture to a FBO
 	//-----------------------------------------------------------------------------
 	glGenFramebuffersEXT( 1, &fbo ); 
 	glBindFramebufferEXT( GL_FRAMEBUFFER_EXT, fbo );
 	glFramebufferTexture2DEXT( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, 
-		GL_TEXTURE_RECTANGLE_ARB, texA, 0 );
-	glFramebufferTexture2DEXT( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT1_EXT, 
-		GL_TEXTURE_RECTANGLE_ARB, texB, 0 );
-	glFramebufferTexture2DEXT( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT2_EXT, 
-		GL_TEXTURE_RECTANGLE_ARB, texLineA, 0 );
-	glFramebufferTexture2DEXT( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT3_EXT, 
-		GL_TEXTURE_RECTANGLE_ARB, texLineB, 0 );
-	glFramebufferTexture2DEXT( GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT4_EXT, 
 		GL_TEXTURE_2D, morphedTexObj, 0 );
 	CheckFramebufferStatus();
 	printOpenGLError();
@@ -391,7 +377,6 @@ static void InitGlut(int argc, char** argv)
 	glDisable( GL_STENCIL_TEST );
 	glEnable(GL_TEXTURE_2D);
 	glPolygonMode( GL_FRONT, GL_FILL );
-
 }
 
 void onResize (int w, int h)
@@ -399,6 +384,7 @@ void onResize (int w, int h)
 	winWidth = w;
 	winHeight = h;
 
+	// Determine image scale
 	imgScale = (float)winWidth / imgWidth;
 	if(winHeight < imgHeight * imgScale)
 		imgScale = (float)winHeight / imgHeight;
@@ -536,7 +522,7 @@ int main(int argc, char* argv[])
 	imgWidth = imgA->width;
 	imgHeight = imgA->height;
 	
-	//outputArray = new float[imgWidth * imgHeight * 4];
+	// Initialise program
 	InitLine();
 	InitGlut(argc, argv);
 	InitGlew();
@@ -561,7 +547,6 @@ int main(int argc, char* argv[])
 static void MakeMorphImage(float t)
 {
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, fbo);
-	glDrawBuffer( GL_COLOR_ATTACHMENT4_EXT );
 
 	// Set up projection, modelview matrices and viewport.
 	glMatrixMode( GL_PROJECTION );
@@ -573,6 +558,16 @@ static void MakeMorphImage(float t)
 
 	// Enable morphing shader
 	glUseProgram( morphProg );
+
+	// Bind texture to texture units
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, texA);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, texB);
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, texLineA);
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_2D, texLineB);
 
 	// Set shader uniform vars
 	GLint uniStep = glGetUniformLocation( morphProg, "Step" );
@@ -587,6 +582,8 @@ static void MakeMorphImage(float t)
 		glVertex2f( imgWidth, imgHeight );
 		glVertex2f( imgWidth, 0 );
 	glEnd();
+
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 }
 
 static void drawMorphImage()
