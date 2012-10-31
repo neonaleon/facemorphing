@@ -1,3 +1,8 @@
+rootDir = "./"
+imgFilename = "inputa.jpg"
+markcolor = (0, 0, 255)
+marktype = 2
+
 # A program for marking corresponding points in two images.
 # Author: Leow Wee Kheng
 # Department of Computer Science, National University of Singapore
@@ -162,14 +167,18 @@ class GUI:
 # Main 
 
 import os
+import sys
 import cv2.cv as cv
 import numpy as np
 
-rootDir = "./"
-imgFile = rootDir + "input.jpg"
+if len(sys.argv) == 2:
+	imgFilename = sys.argv[1]
+elif len(sys.argv) != 1:
+	print sys.argv
+	sys.exit("Too many arguments\nUsage: <image name>");
+	
+imgFile = rootDir + imgFilename
 lineFile = os.path.splitext(imgFile)[0] + ".mld"
-markcolor = (0, 0, 255)
-marktype = 2
 font = cv.InitFont(cv.CV_FONT_HERSHEY_PLAIN, 1, 1)
 
 # Create and run GUI
@@ -183,3 +192,4 @@ gui.save_points(lineFile)
 
 # Clean up
 cv.DestroyWindow(gui.win.winname)
+sys.exit()
