@@ -535,6 +535,7 @@ int main(int argc, char* argv[])
 
 	// Display user instructions in console window.
 	printf( "Press and hold 'A/D' to control morphing\n" );
+	printf( "Press 'R' to render to file\n" );
 	printf( "Press 'T' to morph between faces\n" );
 	printf( "Press 'X' to toggle between blending\n(Cross-dissolve, source only, destination only)\n" );
 	printf( "Press 'L' to show lines\n" );
