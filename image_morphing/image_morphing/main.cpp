@@ -203,6 +203,7 @@ static void onRender()
 	// Calculate frame position and thus t
 	int currentTime = glutGet(GLUT_ELAPSED_TIME);
 	int elapsed = currentTime - lastTime;
+	lastTime = currentTime;
 	if(isPlaying)
 	{
 		frameNumber += elapsed / 1000.0f * playDirection *frameRate;
@@ -243,7 +244,6 @@ static void onRender()
 		drawLines(t);
 
 	glutSwapBuffers();
-	lastTime = currentTime;
 }
 
 //---------------------------------------------------------------------------
