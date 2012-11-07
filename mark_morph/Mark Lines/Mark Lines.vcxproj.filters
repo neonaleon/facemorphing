@@ -33,6 +33,12 @@
     <ClCompile Include="shader_util.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GLUTWindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IGLUTDelegate.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MarkUI.h">
@@ -48,6 +54,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="shader_util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GLUTWindow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IGLUTDelegate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

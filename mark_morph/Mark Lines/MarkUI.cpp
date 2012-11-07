@@ -1,9 +1,13 @@
 #include "MarkUI.h"
 #include "ImageMorph.h"
 #include "constants.h"
+#include <GL/glew.h>
+#include <GL/glut.h>
+#include "shader_util.h"
+#include "GLUTWindow.h"
 
-extern const CvScalar MARKCOLOR;
-extern const int CIRCLE_SIZE;
+//extern const CvScalar MARKCOLOR;
+//extern const int CIRCLE_SIZE;
 
 CMarkUI::CMarkUI(CImageMorph *app, const char* filename)
 {
@@ -11,20 +15,23 @@ CMarkUI::CMarkUI(CImageMorph *app, const char* filename)
 	m_isModified = true;
 	m_prevVertex = -1;
 	m_dragPoint = -1;
-	//cvInitFont(&FONT, CV_FONT_HERSHEY_SIMPLEX, 1.0, 1.0, 0, 1, CV_AA);
+	m_imgScale = 1;
 
 	strcpy(m_imgFilename, filename);
 	m_inImage = cvLoadImage(m_imgFilename, CV_LOAD_IMAGE_UNCHANGED);
-	m_glImage = cvLoadImage(m_imgFilename, CV_LOAD_IMAGE_UNCHANGED);
-	cvCopy(m_inImage, m_glImage);
-	cvFlip(m_glImage, 0);
-	m_frameBuffer = cvLoadImage(m_imgFilename, CV_LOAD_IMAGE_UNCHANGED);
+	cvFlip(m_inImage);
+	m_imgWidth = m_inImage->width;
+	m_imgHeight = m_inImage->height;
+
 	string fn = filename;
 	string lineFilename = fn.substr(0, fn.find_last_of(".")).append(".mld");
 	strcpy(m_lineFilename, lineFilename.c_str());
 
+	initGLState();
+	initTexture();
+
 	loadLines();
-	onRedraw();
+	//onRedraw();
 }
 
 CMarkUI::~CMarkUI(void)
@@ -32,6 +39,39 @@ CMarkUI::~CMarkUI(void)
 	saveLines();
 	cvReleaseImage(&m_inImage);
 }
+
+void CMarkUI::initGLState()
+{
+	// Set some OpenGL states and projection.
+	glDisable( GL_DITHER );
+	glDisable( GL_DEPTH_TEST );
+	glDisable( GL_BLEND );
+	glDisable( GL_ALPHA_TEST );
+	glDisable( GL_COLOR_LOGIC_OP );
+	glDisable( GL_SCISSOR_TEST );
+	glDisable( GL_STENCIL_TEST );
+	glEnable(GL_TEXTURE_2D);
+	glPolygonMode( GL_FRONT, GL_FILL );
+}
+
+//---------------------------------------------------------------------------
+// Upload both face images and line information to GPU
+//---------------------------------------------------------------------------
+void CMarkUI::initTexture()
+{
+	// Create texture image
+	glActiveTexture( GL_TEXTURE0 );
+	glGenTextures( 1, &m_image );
+	glBindTexture( GL_TEXTURE_2D, m_image );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB,
+		m_inImage->width, m_inImage->height, 0, GL_BGR, GL_UNSIGNED_BYTE, m_inImage->imageData);
+	printOpenGLError();
+};
 
 float* CMarkUI::getPackedLine()
 {
@@ -56,7 +96,7 @@ float* CMarkUI::getPackedLine()
 
 char* CMarkUI::getImageData()
 {
-	return m_glImage->imageData;
+	return m_inImage->imageData;
 }
 
 int CMarkUI::getNumLines()
@@ -111,14 +151,28 @@ void CMarkUI::saveLines()
 	fclose(lineFile);
 }
 
-void CMarkUI::onMousePress( int event, int x, int y, int flags, void* param )
+void CMarkUI::onMousePress( int button, int state, int x, int y )
 {
 	int currPtIndex;
 	vector<int> adjacentLines;
-	y = m_inImage->height - y;
 
-	switch( event ){
-	case CV_EVENT_LBUTTONUP:
+	// Convert point to image space
+	int winWidth = m_window->getWidth();
+	int winHeight = m_window->getHeight();
+	int leftBorder = (m_window->getWidth() - m_imgScale * m_imgWidth) / 2.0f;
+	int bottomBorder = (m_window->getHeight() - m_imgScale * m_imgHeight) / 2.0f;
+	x = (x - leftBorder) / m_imgScale;
+	y = (y - bottomBorder) / m_imgScale;
+	y = m_imgHeight - y;
+
+	// Check if click is within image
+	if(x < 0 || x >= m_imgWidth || y < 0 || y >= m_imgHeight)
+		return;
+
+	if(button == GLUT_LEFT_BUTTON && state == GLUT_UP)
+	{
+		m_isLeftMouseDown = false;
+
 		// User has stopped dragging
 		m_dragPoint = -1;
 
@@ -144,32 +198,14 @@ void CMarkUI::onMousePress( int event, int x, int y, int flags, void* param )
 		// Inform app of line change
 		m_isModified = true;
 		m_app->onLineUpdate();
-		onRedraw();
-		break;
-
-	case CV_EVENT_LBUTTONDOWN:
+		glutSetWindow(m_window->getWindow());
+		glutPostRedisplay();
+	} else if(button == GLUT_LEFT_BUTTON && state == GLUT_DOWN)
+	{
+		m_isLeftMouseDown = true;
 		m_dragPoint = searchPoint(x, y, 5);
-		break;
-
-	case CV_EVENT_MOUSEMOVE:
-		if(!(flags & CV_EVENT_FLAG_LBUTTON))
-			return;
-		if(m_dragPoint == -1)
-			return;
-
-		// End line segment
-		m_prevVertex = -1;
-
-		m_vertexBuffer[m_dragPoint].x = x;
-		m_vertexBuffer[m_dragPoint].y = y;
-
-		// Inform app of line change
-		m_isModified = true;
-		//m_app->onLineUpdate();
-		onRedraw();
-		break;
-
-	case CV_EVENT_RBUTTONUP:
+	} else if(button == GLUT_RIGHT_BUTTON && state == GLUT_UP)
+	{
 		// End line segment
 		if(m_prevVertex != -1)
 		{
@@ -192,9 +228,10 @@ void CMarkUI::onMousePress( int event, int x, int y, int flags, void* param )
 		// Inform app of line change
 		m_isModified = true;
 		m_app->onLineUpdate();
-		onRedraw();
-		break;
+		glutSetWindow(m_window->getWindow());
+		glutPostRedisplay();
 	}
+	
 }
 
 int CMarkUI::searchPoint( float x, float y, float radius )
@@ -230,36 +267,117 @@ void CMarkUI::searchLines( int pointIndex, vector<int>* adjacentLines )
 
 IplImage* CMarkUI::getImage()
 {
-	return m_frameBuffer;
+	return m_inImage;
 }
 
-void CMarkUI::onRedraw()
+void CMarkUI::onMouseMove( int x, int y )
 {
-	// Clear framebuffer
-	cvCopy(m_inImage, m_frameBuffer);
+	if(!m_isLeftMouseDown || m_dragPoint == -1)
+		return;
 
-	// Draw first point
+	// End line segment
+	m_prevVertex = -1;
+
+	m_vertexBuffer[m_dragPoint].x = x;
+	m_vertexBuffer[m_dragPoint].y = y;
+
+	// Inform app of line change
+	m_isModified = true;
+	//m_app->onLineUpdate();
+	glutPostRedisplay();
+}
+
+void CMarkUI::onResize( int width, int height )
+{
+	int winWidth = m_window->getWidth();
+	int winHeight = m_window->getHeight();
+
+	// Determine image scale
+	m_imgScale = (float)winWidth / m_imgWidth;
+	if(winHeight < m_imgHeight * m_imgScale)
+		m_imgScale = (float)winHeight / m_imgHeight;
+
+	//glutPostRedisplay();
+}
+
+void CMarkUI::onRender()
+{
+	int winWidth = m_window->getWidth();
+	int winHeight = m_window->getHeight();
+	int leftBorder = (m_window->getWidth() - m_imgScale * m_imgWidth) / 2.0f;
+	int bottomBorder = (m_window->getHeight() - m_imgScale * m_imgHeight) / 2.0f;
+
+	// Reset projection, modelview matrices and viewport.
+	glMatrixMode( GL_PROJECTION );
+	glLoadIdentity();
+	gluOrtho2D( 0, winWidth, 0, winHeight );
+	glMatrixMode( GL_MODELVIEW );
+	glLoadIdentity();
+	glViewport( 0, 0, winWidth, winHeight );
+
+	// Reset GL states
+	glClearColor(0.243, 0.243, 0.243, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	// Draw image
+	printOpenGLError();
+	glEnable(GL_TEXTURE_2D);
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	glActiveTexture( GL_TEXTURE0 );
+	glBindTexture( GL_TEXTURE_2D, m_image);
+	glBegin( GL_QUADS );
+	glTexCoord2f(0, 0);
+	glVertex2f(leftBorder, bottomBorder);
+	glTexCoord2f(0, 1);
+	glVertex2f(leftBorder, bottomBorder + m_imgHeight * m_imgScale);
+	glTexCoord2f(1, 1);
+	glVertex2f(leftBorder + m_imgWidth * m_imgScale, bottomBorder + m_imgHeight * m_imgScale);
+	glTexCoord2f(1, 0);
+	glVertex2f(leftBorder + m_imgWidth * m_imgScale, bottomBorder);
+	glEnd();
+	
+	// Draw points
+	glDisable(GL_TEXTURE_2D);
+	glColor3fv(MARKCOLOR);
+	glPointSize(CIRCLE_SIZE);
+	glBegin(GL_POINTS);
 	if(m_prevVertex != -1)
 	{
-		CvPoint first = cvPointFrom32f(m_vertexBuffer[m_prevVertex]);
-		first.y = m_inImage->height - first.y;
-		cvCircle(m_frameBuffer, first, CIRCLE_SIZE, MARKCOLOR);
+		CvPoint2D32f first = m_vertexBuffer[m_prevVertex];
+		glVertex2f(leftBorder+first.x*m_imgScale, bottomBorder+first.y*m_imgScale);
+		//first.y = m_inImage->height - first.y;
+		//cvCircle(m_frameBuffer, first, CIRCLE_SIZE, MARKCOLOR);
 	}
-
-	// Draw all other lines and points
 	for(int i=0; i<m_indexBuffer.size(); i++)
 	{
-		CvPoint start = cvPointFrom32f(m_vertexBuffer[m_indexBuffer[i].start]);
-		start.y = m_inImage->height - start.y;
-		CvPoint end = cvPointFrom32f(m_vertexBuffer[m_indexBuffer[i].end]);
-		end.y = m_inImage->height - end.y;
-		cvCircle(m_frameBuffer, start, CIRCLE_SIZE, MARKCOLOR);
-		cvCircle(m_frameBuffer, end, CIRCLE_SIZE, MARKCOLOR);
-		cvLine(m_frameBuffer, start, end, MARKCOLOR);
-		char number[31];
+		CvPoint2D32f start = m_vertexBuffer[m_indexBuffer[i].start];
+		CvPoint2D32f end = m_vertexBuffer[m_indexBuffer[i].end];
+		glVertex2f(leftBorder+start.x*m_imgScale, bottomBorder+start.y*m_imgScale);
+		glVertex2f(leftBorder+end.x*m_imgScale, bottomBorder+end.y*m_imgScale);
+	}
+	glEnd();
+
+	// Draw lines
+	glBegin(GL_LINES);
+	for(int i=0; i<m_indexBuffer.size(); i++)
+	{
+		CvPoint2D32f start = m_vertexBuffer[m_indexBuffer[i].start];
+		CvPoint2D32f end = m_vertexBuffer[m_indexBuffer[i].end];
+		glVertex2f(leftBorder+start.x*m_imgScale, bottomBorder+start.y*m_imgScale);
+		glVertex2f(leftBorder+end.x*m_imgScale, bottomBorder+end.y*m_imgScale);
+
+		/*char number[31];
 		itoa(i+1, number, 10);
 		CvFont font;
 		cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, 0.8, 0.8);
-		cvPutText(m_frameBuffer, number, start, &font, MARKCOLOR);
+		cvPutText(m_frameBuffer, number, start, &font, MARKCOLOR);*/
 	}
+	glEnd();
+	
+	glutSwapBuffers();
+}
+
+void CMarkUI::onKeyPress( unsigned char key, int x, int y )
+{
+	m_app->forwardKeyPress(key, x, y);
 }

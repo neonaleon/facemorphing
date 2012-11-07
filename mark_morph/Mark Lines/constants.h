@@ -16,5 +16,5 @@ const char VERTSHADER[] = "morph.vert";
 const char FRAGSHADER[] = "morph.frag";
 
 // Drawing parameters
-const CvScalar MARKCOLOR = cvScalar(0, 0, 255);
-const int CIRCLE_SIZE = 1;
+const float MARKCOLOR[] = {0.5, 0.8, 0.15686};
+const float CIRCLE_SIZE = 4;

@@ -3,12 +3,15 @@
 #include <vector>
 #include <cv.h>
 #include <highgui.h>
+#include "IGLUTDelegate.h"
+#include <GL/glew.h>
+#include <GL/glut.h>
 
 using namespace std;
 
 class CImageMorph;
 
-class CMarkUI
+class CMarkUI : public IGLUTDelegate
 {
 private:
 	struct Line2D
@@ -25,16 +28,16 @@ private:
 	char m_lineFilename[31];
 
 	IplImage* m_inImage;
-	IplImage* m_glImage;
-	IplImage* m_frameBuffer;
+	float m_imgScale;
+	int m_imgWidth, m_imgHeight;
+	GLuint m_image;
 
 	bool m_isModified;
 	int m_prevVertex;
 	int m_dragPoint;
+	bool m_isLeftMouseDown;
 
 	CImageMorph *m_app;
-
-	// static CvFont FONT;
 
 public:
 	float* getPackedLine();
@@ -45,14 +48,20 @@ public:
 	void loadLines();
 	void saveLines();
 
-	void onMousePress(int event, int x, int y, int flags, void* param);
-
 	CMarkUI(CImageMorph *app, const char* filename);
 	~CMarkUI(void);
 
 private:
 	int searchPoint(float x, float y, float radius);
 	void searchLines(int pointIndex, vector<int>* adjacentLines);
-	void onRedraw();
+
+	virtual void onMousePress(int button, int state, int x, int y);
+	virtual void onMouseMove(int x, int y);
+	virtual void onResize(int width, int height);
+	virtual void onRender();
+	virtual void onKeyPress(unsigned char key, int x, int y);
+
+	void initGLState();
+	void initTexture();
 };
 

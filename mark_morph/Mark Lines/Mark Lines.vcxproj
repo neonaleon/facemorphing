@@ -83,6 +83,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="GLUTWindow.cpp" />
+    <ClCompile Include="IGLUTDelegate.cpp" />
     <ClCompile Include="ImageMorph.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MarkUI.cpp" />
@@ -91,6 +93,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="constants.h" />
+    <ClInclude Include="GLUTWindow.h" />
+    <ClInclude Include="IGLUTDelegate.h" />
     <ClInclude Include="ImageMorph.h" />
     <ClInclude Include="MarkUI.h" />
     <ClInclude Include="Renderer.h" />

@@ -2,50 +2,74 @@
 #include "constants.h"
 #include "MarkUI.h"
 #include "Renderer.h"
+#include <GL/glew.h>
+#include <GL/glut.h>
 #include <cv.h>
+#include "GLUTWindow.h"
 
 //extern const char *IMAGEA, *IMAGEB;
 
 CImageMorph::CImageMorph(void)
 {
 	// Init application states
-	m_blendType = 0;
+	/*m_blendType = 0;
 	m_frameNumber = 0;
 	m_frameTotal = FRAMERATE * DURATION;
 	m_isPlaying = false;
 	m_playDirection = 1;
 	m_isRendering = false;
 	m_isConsistent = false;
-	m_showDebugLines = false;
+	m_showDebugLines = false;*/
 
-	// Initialise 2 edit windows
-	m_imageA = new CMarkUI(this, IMAGEA);
-	cvNamedWindow(IMAGEA, CV_WINDOW_AUTOSIZE);
-	cvSetMouseCallback(IMAGEA, CImageMorph::onMousePress, m_imageA);
-	m_imageB = new CMarkUI(this, IMAGEB);
-	cvNamedWindow(IMAGEB, CV_WINDOW_AUTOSIZE);
-	cvSetMouseCallback(IMAGEB, CImageMorph::onMousePress, m_imageB);
+	// Read image size
+	IplImage *imga = cvLoadImage(IMAGEA);
+	IplImage *imgb = cvLoadImage(IMAGEB);
+	m_width = imga->width;
+	m_height = imga->height;
+	int widthB = imgb->width;
+	int heightB = imgb->height;
+	cvReleaseImage(&imga);
+	cvReleaseImage(&imgb);
 
 	// Check if images are same size
-	if(m_imageA->getImage()->width != m_imageB->getImage()->width ||
-		m_imageA->getImage()->height != m_imageB->getImage()->height)
+	if(m_width != widthB || m_height != heightB)
 	{
 		fprintf( stderr, "Error: Image size not identical\n");
 		char ch; scanf( "%c", &ch ); // Prevents the console window from closing.
 		exit( 1 );
 	}
 
+	// Initialize GLUT.
+	int argc = 1;
+	char *argv[] = {"CS4243 Image Morph", NULL};
+	glutInit( &argc, argv );
+	glutInitDisplayMode (GLUT_DOUBLE | GLUT_RGB);
+
+	// Initialise 2 edit windows
+	CGLUTWindow *win = new CGLUTWindow("Image A", m_width, m_height);
+	initGlew();		// Initialise GLEW and check for compatibility
+	m_imageA = new CMarkUI(this, IMAGEA);
+	m_imageA->setWindow(win);
+	m_windowList.push_back(win);
+	win = new CGLUTWindow("Image B", m_width, m_height);
+	m_imageB = new CMarkUI(this, IMAGEB);
+	m_imageB->setWindow(win);
+	m_windowList.push_back(win);
+
 	// Initialise output window
-	m_renderer = new CRenderer(m_imageA, m_imageB);
-	m_renderer->setBlendType(m_blendType);
-	cvNamedWindow("Morphed Image", CV_WINDOW_AUTOSIZE);
+	win = new CGLUTWindow("Morphed Image", m_width, m_height);
+	m_renderer = new CRenderer(this, m_imageA, m_imageB);
+	m_renderer->setWindow(win);
+	m_windowList.push_back(win);
+
+	
 
 	// Create output image buffers
-	CvSize size;
-	size.width = m_imageA->getImage()->width;
-	size.height = m_imageA->getImage()->height;
-	m_outputData = new char[size.width * size.height * 3];
-	m_outputImage = cvCreateImageHeader(size, IPL_DEPTH_8U, 3);	
+	/*CvSize size;
+	size.width = m_width;
+	size.height = m_height;
+	m_outputData = new char[m_width * m_height * 3];
+	m_outputImage = cvCreateImageHeader(size, IPL_DEPTH_8U, 3);	*/
 	onLineUpdate();
 
 	// Display user instructions in console window.
@@ -59,20 +83,24 @@ CImageMorph::CImageMorph(void)
 
 CImageMorph::~CImageMorph(void)
 {
-	cvDestroyAllWindows();
+	for(auto it=m_windowList.begin(); it!=m_windowList.end(); it++)
+		delete (*it);
+	m_windowList.clear();
 	delete m_renderer;
 	delete m_imageA;
 	delete m_imageB;
 }
-
+/*
 void CImageMorph::onMousePress( int event, int x, int y, int flags, void* param )
 {
 	CMarkUI* receiver = (CMarkUI*) param;
 	receiver->onMousePress(event, x, y, flags, NULL);
-}
+}*/
 
 void CImageMorph::run()
 {
+	glutMainLoop();
+	/*
 	bool hasNext = true;
 	while(hasNext)
 	{
@@ -82,7 +110,7 @@ void CImageMorph::run()
 		if(m_isPlaying)
 			onRedraw();
 		cvShowImage("Morphed Image", m_outputImage);
-	}
+	}*/
 }
 
 void CImageMorph::onLineUpdate()
@@ -96,9 +124,8 @@ void CImageMorph::onLineUpdate()
 
 	m_isConsistent = true;
 	m_renderer->setLines();
-	onRedraw();
 }
-
+/*
 bool CImageMorph::onKeyPress(unsigned char key)
 {
 	if(m_isRendering)
@@ -173,8 +200,9 @@ bool CImageMorph::onKeyPress(unsigned char key)
 	}
 
 	return true;
-}
+}*/
 
+/*
 void CImageMorph::onRedraw()
 {
 	// Calculate frame position and thus t
@@ -206,8 +234,8 @@ void CImageMorph::onRedraw()
 
 	if(m_showDebugLines)
 		drawLines(t);
-}
-
+}*/
+/*
 void CImageMorph::writeVideo()
 {
 	m_isPlaying = !m_isPlaying;
@@ -226,8 +254,9 @@ void CImageMorph::writeVideo()
 		cvWriteFrame(vidw, m_outputImage);
 	}
 	cvReleaseVideoWriter(&vidw);
-}
+}*/
 
+/*
 void CImageMorph::drawLines(float t)
 {
 	float* lineA = m_imageA->getPackedLine();
@@ -246,4 +275,75 @@ void CImageMorph::drawLines(float t)
 		end.y = height - end.y;
 		cvLine(m_outputImage, cvPointFrom32f(start), cvPointFrom32f(end), MARKCOLOR);
 	}
+}*/
+
+//---------------------------------------------------------------------------
+// Check for OpenGL 2.0 and the necessary OpenGL extensions
+//---------------------------------------------------------------------------
+void CImageMorph::initGlew()
+{
+	// Initialize GLEW.
+	GLenum err = glewInit();
+	if ( err != GLEW_OK )
+	{
+		fprintf( stderr, "Error: %s.\n", glewGetErrorString( err ) );
+		char ch; scanf( "%c", &ch ); // Prevents the console window from closing.
+		exit( 1 );
+	}
+
+	// Make sure OpenGL 2.0 is supported.
+	if ( !GLEW_VERSION_2_0 )
+	{
+		fprintf( stderr, "Error: OpenGL 2.0 is not supported.\n" );
+		char ch; scanf( "%c", &ch ); // Prevents the console window from closing.
+		exit( 1 );
+	}
+
+	// Make sure necessary OpenGL extensions are supported.
+	bool extSupported = true;
+	if ( !GLEW_ARB_texture_float)
+	{
+		fprintf( stderr, "Error: Float textures not supported.\n" );
+		extSupported = false;
+	}
+	if ( !GLEW_ARB_texture_rectangle)
+	{
+		fprintf( stderr, "Error: Texture rectangles not supported.\n" );
+		extSupported = false;
+	}
+	if ( !GLEW_ARB_framebuffer_object)
+	{
+		fprintf( stderr, "Error: Framebuffer objects not supported.\n" );
+		extSupported = false;
+	}
+	if ( !extSupported)
+	{
+		char ch; scanf( "%c", &ch ); // Prevents the console window from closing.
+		exit( 1 );
+	}
+}
+
+void CImageMorph::forwardKeyPress( unsigned char key, int x, int y )
+{
+	m_renderer->onKeyPress(key, x, y);
+}
+
+void CImageMorph::writeVideo()
+{
+	CvSize size = Size(m_width, m_height);
+	CvVideoWriter *vidw = cvCreateVideoWriter(OUTVIDEO, CODEC, FRAMERATE, size);
+
+	char *outputData = new char[m_width * m_height * 3];
+	IplImage *outputImage = cvCreateImageHeader(size, IPL_DEPTH_8U, 3);
+
+	for(int i=0; i<=FRAMERATE*DURATION; i++)
+	{
+		m_renderer->makeMorphImage((float)i / (FRAMERATE*DURATION));
+		m_renderer->getRender(outputData);
+		outputImage->imageData = outputData;
+		outputImage->imageDataOrigin = outputImage->imageData;
+		cvFlip(outputImage, 0);
+		cvWriteFrame(vidw, outputImage);
+	}
+	cvReleaseVideoWriter(&vidw);
 }
