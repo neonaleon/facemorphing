@@ -83,6 +83,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="gltext.cpp" />
     <ClCompile Include="GLUTWindow.cpp" />
     <ClCompile Include="IGLUTDelegate.cpp" />
     <ClCompile Include="ImageMorph.cpp" />
@@ -93,6 +94,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="constants.h" />
+    <ClInclude Include="gltext.h" />
     <ClInclude Include="GLUTWindow.h" />
     <ClInclude Include="IGLUTDelegate.h" />
     <ClInclude Include="ImageMorph.h" />

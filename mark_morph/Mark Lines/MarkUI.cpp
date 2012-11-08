@@ -5,6 +5,7 @@
 #include <GL/glut.h>
 #include "shader_util.h"
 #include "GLUTWindow.h"
+#include "gltext.h"
 
 //extern const CvScalar MARKCOLOR;
 //extern const int CIRCLE_SIZE;
@@ -275,6 +276,15 @@ void CMarkUI::onMouseMove( int x, int y )
 	if(!m_isLeftMouseDown || m_dragPoint == -1)
 		return;
 
+	// Convert point to image space
+	int winWidth = m_window->getWidth();
+	int winHeight = m_window->getHeight();
+	int leftBorder = (m_window->getWidth() - m_imgScale * m_imgWidth) / 2.0f;
+	int bottomBorder = (m_window->getHeight() - m_imgScale * m_imgHeight) / 2.0f;
+	x = (x - leftBorder) / m_imgScale;
+	y = (y - bottomBorder) / m_imgScale;
+	y = m_imgHeight - y;
+
 	// End line segment
 	m_prevVertex = -1;
 
@@ -296,8 +306,6 @@ void CMarkUI::onResize( int width, int height )
 	m_imgScale = (float)winWidth / m_imgWidth;
 	if(winHeight < m_imgHeight * m_imgScale)
 		m_imgScale = (float)winHeight / m_imgHeight;
-
-	//glutPostRedisplay();
 }
 
 void CMarkUI::onRender()
@@ -365,15 +373,18 @@ void CMarkUI::onRender()
 		CvPoint2D32f end = m_vertexBuffer[m_indexBuffer[i].end];
 		glVertex2f(leftBorder+start.x*m_imgScale, bottomBorder+start.y*m_imgScale);
 		glVertex2f(leftBorder+end.x*m_imgScale, bottomBorder+end.y*m_imgScale);
-
-		/*char number[31];
-		itoa(i+1, number, 10);
-		CvFont font;
-		cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, 0.8, 0.8);
-		cvPutText(m_frameBuffer, number, start, &font, MARKCOLOR);*/
 	}
 	glEnd();
 	
+	// Draw line numbers
+	for(int i=0; i<m_indexBuffer.size(); i++)
+	{
+		CvPoint2D32f start = m_vertexBuffer[m_indexBuffer[i].start];
+		start.x = start.x * m_imgScale + leftBorder;
+		start.y = start.y * m_imgScale + bottomBorder;
+		gltext(start.x, start.y, "%d", i+1);
+	}
+
 	glutSwapBuffers();
 }
 

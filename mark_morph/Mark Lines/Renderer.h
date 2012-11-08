@@ -23,7 +23,7 @@ private:
 	GLuint m_texA, m_texB, m_texLineA, m_texLineB, m_morphedTexObj;
 	GLuint m_fbo;
 
-	int64 m_lastTime;
+	int m_lastTime;
 	int m_frameNumber, m_frameTotal;
 	bool m_isPlaying;
 	float m_playDirection;

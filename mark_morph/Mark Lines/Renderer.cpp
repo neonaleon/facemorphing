@@ -28,7 +28,6 @@ CRenderer::CRenderer(CImageMorph *app, CMarkUI* imgA, CMarkUI* imgB)
 	m_frameTotal = FRAMERATE * DURATION;
 	m_isPlaying = false;
 	m_playDirection = 1;
-	//m_isConsistent = false;
 	m_showDebugLines = false;
 
 	// Initialise renderer
@@ -307,9 +306,7 @@ void CRenderer::onKeyPress( unsigned char key, int x, int y )
 	case 'R':
 		m_isPlaying = !m_isPlaying;
 		m_showDebugLines = false;
-		printf("Rendering to %s...\nDo not close window!\n", OUTVIDEO);
 		m_app->writeVideo();
-		printf("Render complete\n");
 		break;
 
 	case 't':
@@ -354,6 +351,20 @@ void CRenderer::onKeyPress( unsigned char key, int x, int y )
 	case 'l':
 	case 'L':
 		m_showDebugLines = !m_showDebugLines;
+		glutPostRedisplay();
+		break;
+
+	case '0':
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
+		m_frameNumber = (key - '0') / 10.0f * m_frameTotal;
 		glutPostRedisplay();
 		break;
 
