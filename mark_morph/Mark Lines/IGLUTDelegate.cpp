@@ -1,3 +1,14 @@
+/////////////////////////////////////////////////////////////////////////////
+// File: IGLUTDelegate.cpp
+// 
+// Delegate interface
+// Classes implementing IGLUTDelgate will receive window events from GLUT.
+// GL context will be set to the active GLUT window sending the event.
+// All event handlers are optional.
+//
+// Author: Daniel Seah
+/////////////////////////////////////////////////////////////////////////////
+
 #include "IGLUTDelegate.h"
 #include "GLUTWindow.h"
 

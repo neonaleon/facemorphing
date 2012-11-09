@@ -1,11 +1,22 @@
+/////////////////////////////////////////////////////////////////////////////
+// File: MarkUI.h
+// 
+// Edit window class
+// CMarkUI contains all states required for the editing windows
+// This class is also responsible for keeping a copy of the original input
+// image.
+//
+// Author: Daniel Seah
+/////////////////////////////////////////////////////////////////////////////
+
 #pragma once
 
 #include <vector>
 #include <cv.h>
 #include <highgui.h>
-#include "IGLUTDelegate.h"
 #include <GL/glew.h>
 #include <GL/glut.h>
+#include "IGLUTDelegate.h"
 
 using namespace std;
 

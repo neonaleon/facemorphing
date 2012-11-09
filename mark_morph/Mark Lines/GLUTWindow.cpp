@@ -1,3 +1,14 @@
+/////////////////////////////////////////////////////////////////////////////
+// File: GLUTWindow.cpp
+// 
+// Wrapper class for a GLUT Window
+// CGLUTWindow manages a GLUT window and its c-style event callbacks.
+// GLUT event callbacks are forwarded to a delegate class. GL context is
+// also guranteed to belong to the active GLUT window.
+//
+// Author: Daniel Seah
+/////////////////////////////////////////////////////////////////////////////
+
 #include "GLUTWindow.h"
 #include "IGLUTDelegate.h"
 

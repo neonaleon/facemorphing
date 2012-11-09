@@ -1,14 +1,22 @@
+/////////////////////////////////////////////////////////////////////////////
+// File: MarkUI.cpp
+// 
+// Edit window class
+// CMarkUI contains all states required for the editing windows
+// This class is also responsible for keeping a copy of the original input
+// image.
+//
+// Author: Daniel Seah
+/////////////////////////////////////////////////////////////////////////////
+
 #include "MarkUI.h"
 #include "ImageMorph.h"
 #include "constants.h"
 #include <GL/glew.h>
 #include <GL/glut.h>
+#include "gltext.h"
 #include "shader_util.h"
 #include "GLUTWindow.h"
-#include "gltext.h"
-
-//extern const CvScalar MARKCOLOR;
-//extern const int CIRCLE_SIZE;
 
 CMarkUI::CMarkUI(CImageMorph *app, const char* filename)
 {
@@ -32,7 +40,6 @@ CMarkUI::CMarkUI(CImageMorph *app, const char* filename)
 	initTexture();
 
 	loadLines();
-	//onRedraw();
 }
 
 CMarkUI::~CMarkUI(void)
@@ -53,6 +60,7 @@ void CMarkUI::initGLState()
 	glDisable( GL_STENCIL_TEST );
 	glEnable(GL_TEXTURE_2D);
 	glPolygonMode( GL_FRONT, GL_FILL );
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 }
 
 //---------------------------------------------------------------------------
@@ -61,7 +69,6 @@ void CMarkUI::initGLState()
 void CMarkUI::initTexture()
 {
 	// Create texture image
-	glActiveTexture( GL_TEXTURE0 );
 	glGenTextures( 1, &m_image );
 	glBindTexture( GL_TEXTURE_2D, m_image );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
@@ -72,6 +79,8 @@ void CMarkUI::initTexture()
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB,
 		m_inImage->width, m_inImage->height, 0, GL_BGR, GL_UNSIGNED_BYTE, m_inImage->imageData);
 	printOpenGLError();
+
+	glBindTexture(GL_TEXTURE_2D, 0);
 };
 
 float* CMarkUI::getPackedLine()
@@ -328,10 +337,6 @@ void CMarkUI::onRender()
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	// Draw image
-	printOpenGLError();
-	glEnable(GL_TEXTURE_2D);
-	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-	glActiveTexture( GL_TEXTURE0 );
 	glBindTexture( GL_TEXTURE_2D, m_image);
 	glBegin( GL_QUADS );
 	glTexCoord2f(0, 0);
@@ -343,9 +348,10 @@ void CMarkUI::onRender()
 	glTexCoord2f(1, 0);
 	glVertex2f(leftBorder + m_imgWidth * m_imgScale, bottomBorder);
 	glEnd();
+
+	glBindTexture( GL_TEXTURE_2D, 0);
 	
 	// Draw points
-	glDisable(GL_TEXTURE_2D);
 	glColor3fv(MARKCOLOR);
 	glPointSize(CIRCLE_SIZE);
 	glBegin(GL_POINTS);
@@ -353,8 +359,6 @@ void CMarkUI::onRender()
 	{
 		CvPoint2D32f first = m_vertexBuffer[m_prevVertex];
 		glVertex2f(leftBorder+first.x*m_imgScale, bottomBorder+first.y*m_imgScale);
-		//first.y = m_inImage->height - first.y;
-		//cvCircle(m_frameBuffer, first, CIRCLE_SIZE, MARKCOLOR);
 	}
 	for(int i=0; i<m_indexBuffer.size(); i++)
 	{

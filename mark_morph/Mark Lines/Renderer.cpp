@@ -1,16 +1,24 @@
+/////////////////////////////////////////////////////////////////////////////
+// File: Renderer.cpp
+// 
+// Output renderer video
+// CMarkUI contains all states required for output video window.
+// This class also hooks up with GLSL and performs rendering of the warped
+// image. 
+//
+// Author: Daniel Seah
+/////////////////////////////////////////////////////////////////////////////
+
 #include "Renderer.h"
 #include "constants.h"
 #include "MarkUI.h"
+#include "ImageMorph.h"
 #include "shader_util.h"
 #include "GLUTWindow.h"
-#include "ImageMorph.h"
 
 // Renderer defines
-//extern const char* OUTVIDEO;
 extern const int FRAMERATE;
 extern const int DURATION;
-//extern const char VERTSHADER;
-//extern const char FRAGSHADER;
 extern const int CODEC;
 
 CRenderer::CRenderer(CImageMorph *app, CMarkUI* imgA, CMarkUI* imgB)
@@ -50,8 +58,18 @@ void CRenderer::initGLState()
 	glDisable( GL_COLOR_LOGIC_OP );
 	glDisable( GL_SCISSOR_TEST );
 	glDisable( GL_STENCIL_TEST );
-	glEnable(GL_TEXTURE_2D);
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 	glPolygonMode( GL_FRONT, GL_FILL );
+
+	// Enable texturing
+	glActiveTexture(GL_TEXTURE0);
+	glEnable(GL_TEXTURE_2D);
+	glActiveTexture(GL_TEXTURE1);
+	glEnable(GL_TEXTURE_2D);
+	glActiveTexture(GL_TEXTURE2);
+	glEnable(GL_TEXTURE_2D);
+	glActiveTexture(GL_TEXTURE3);
+	glEnable(GL_TEXTURE_2D);
 }
 
 //---------------------------------------------------------------------------
@@ -91,7 +109,6 @@ void CRenderer::initTexture()
 	printOpenGLError();
 
 	// Create texture B.
-	glActiveTexture( GL_TEXTURE1 );
 	glGenTextures( 1, &m_texB );
 	glBindTexture( GL_TEXTURE_RECTANGLE_ARB, m_texB );
 	glTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
@@ -114,7 +131,6 @@ void CRenderer::initTexture()
 	glUniform1f( uniTexHeightLoc, (float)m_imgHeight );
 
 	// Upload line A to GPU
-	glActiveTexture( GL_TEXTURE2 );
 	glGenTextures( 1, &m_texLineA );
 	glBindTexture( GL_TEXTURE_RECTANGLE_ARB, m_texLineA );
 	glTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
@@ -127,7 +143,6 @@ void CRenderer::initTexture()
 	printOpenGLError();
 
 	// Upload line B to GPU
-	glActiveTexture( GL_TEXTURE3 );
 	glGenTextures( 1, &m_texLineB );
 	glBindTexture( GL_TEXTURE_RECTANGLE_ARB, m_texLineB );
 	glTexParameteri( GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
@@ -148,7 +163,6 @@ void CRenderer::initTexture()
 	glUniform1f( uniLineCount, (float)m_pImageB->getNumLines() );
 
 	// Create image output texture
-	glActiveTexture( GL_TEXTURE4 );
 	glGenTextures( 1, &m_morphedTexObj );
 	glBindTexture( GL_TEXTURE_2D, m_morphedTexObj );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
@@ -169,6 +183,8 @@ void CRenderer::initTexture()
 		GL_TEXTURE_2D, m_morphedTexObj, 0 );
 	checkFramebufferStatus();
 	printOpenGLError();
+
+	glBindTexture(GL_TEXTURE_2D, 0);
 };
 
 void CRenderer::makeMorphImage(float t)
@@ -187,7 +203,6 @@ void CRenderer::makeMorphImage(float t)
 	glUseProgram( m_morphProg );
 
 	// Bind texture to texture units
-	glEnable(GL_TEXTURE_2D);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_RECTANGLE_ARB, m_texA);
 	glActiveTexture(GL_TEXTURE1);
@@ -213,6 +228,15 @@ void CRenderer::makeMorphImage(float t)
 
 	// Restore output framebuffer
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_RECTANGLE_ARB, 0);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_RECTANGLE_ARB, 0);
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_RECTANGLE_ARB, 0);
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_RECTANGLE_ARB, 0);
 }
 
 //---------------------------------------------------------------------------
@@ -258,35 +282,33 @@ void CRenderer::setLines()
 	float *a = m_pImageA->getPackedLine();
 	float *b = m_pImageB->getPackedLine();
 	int numLines = m_pImageA->getNumLines();
-	glEnable(GL_TEXTURE_2D);
 
 	// Upload line A to GPU
-	glActiveTexture( GL_TEXTURE2 );
+	glActiveTexture( GL_TEXTURE0 );
 	glBindTexture( GL_TEXTURE_RECTANGLE_ARB, m_texLineA );
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTexImage2D( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA32F_ARB,
 		numLines, 1, 0, GL_RGBA, GL_FLOAT, a);
-	printOpenGLError();
 
 	// Upload line B to GPU
-	glActiveTexture( GL_TEXTURE3 );
 	glBindTexture( GL_TEXTURE_RECTANGLE_ARB, m_texLineB );
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTexImage2D( GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA32F_ARB,
 		numLines, 1, 0, GL_RGBA, GL_FLOAT, b);
-	printOpenGLError();
+
+	glBindTexture( GL_TEXTURE_RECTANGLE_ARB, 0 );
 
 	glutPostRedisplay();
 }
 
 void CRenderer::getRender(char* data)
 {
-	glFinish();
-	glEnable(GL_TEXTURE_2D);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, m_morphedTexObj);
 	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 	glGetTexImage(GL_TEXTURE_2D, 0, GL_BGR, GL_UNSIGNED_BYTE, data);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void CRenderer::setBlendType(int blendType)
@@ -417,7 +439,6 @@ void CRenderer::onRender()
 	if(m_showDebugLines)
 		drawLines(t);
 
-	printOpenGLError();
 	glutSwapBuffers();
 }
 
@@ -430,7 +451,6 @@ void CRenderer::drawLines(float t)
 	int bottomBorder = (m_window->getHeight() - m_imgScale * m_imgHeight) / 2.0f;
 	float ax, ay, bx, by;
 
-	glDisable(GL_TEXTURE_2D);
 	glColor3fv(MARKCOLOR);
 	glBegin(GL_LINES);
 	for(int i=0; i<numLines; i++)
@@ -450,9 +470,7 @@ void CRenderer::drawMorphImage()
 	int leftBorder = (m_window->getWidth() - m_imgScale * m_imgWidth) / 2.0f;
 	int bottomBorder = (m_window->getHeight() - m_imgScale * m_imgHeight) / 2.0f;
 
-	glEnable(GL_TEXTURE_2D);
 	glActiveTexture( GL_TEXTURE0 );
-	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 	glBindTexture( GL_TEXTURE_2D, m_morphedTexObj);
 	glBegin( GL_QUADS );
 	glTexCoord2f(0, 0);
@@ -464,6 +482,8 @@ void CRenderer::drawMorphImage()
 	glTexCoord2f(1, 0);
 	glVertex2f(leftBorder + m_imgWidth * m_imgScale, bottomBorder);
 	glEnd();
+
+	glBindTexture( GL_TEXTURE_2D, 0);
 }
 
 void CRenderer::onUpdate()

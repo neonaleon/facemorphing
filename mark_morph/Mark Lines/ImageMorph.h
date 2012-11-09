@@ -1,7 +1,14 @@
+/////////////////////////////////////////////////////////////////////////////
+// File: ImageMorph.h
+// 
+// Main application class
+// This class contains all the program states, renderer and edit windows
+//
+// Author: Daniel Seah, Leon Ho
+/////////////////////////////////////////////////////////////////////////////
+
 #pragma once
 
-#include <cv.h>
-#include <highgui.h>
 #include <vector>
 
 using namespace std;

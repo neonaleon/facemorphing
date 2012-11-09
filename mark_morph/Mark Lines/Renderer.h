@@ -1,12 +1,19 @@
+/////////////////////////////////////////////////////////////////////////////
+// File: Renderer.h
+// 
+// Output renderer video
+// CMarkUI contains all states required for output video window.
+// This class also hooks up with GLSL and performs rendering of the warped
+// image. 
+//
+// Author: Daniel Seah
+/////////////////////////////////////////////////////////////////////////////
+
 #pragma once
 #include <stdlib.h>
 #include <GL/glew.h>
 #include <GL/glut.h>
-#include <cv.h>
-#include <highgui.h>
 #include "IGLUTDelegate.h"
-
-using namespace cv;
 
 class CMarkUI;
 class CImageMorph;

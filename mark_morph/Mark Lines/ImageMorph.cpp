@@ -1,13 +1,21 @@
+/////////////////////////////////////////////////////////////////////////////
+// File: ImageMorph.cpp
+// 
+// Main application class
+// This class contains all the program states, renderer and edit windows
+//
+// Author: Daniel Seah, Leon Ho
+/////////////////////////////////////////////////////////////////////////////
+
 #include "ImageMorph.h"
 #include "constants.h"
 #include "MarkUI.h"
 #include "Renderer.h"
-#include <GL/glew.h>
-#include <GL/glut.h>
-#include <cv.h>
 #include "GLUTWindow.h"
+#include <cv.h>
+#include <highgui.h>
 
-//extern const char *IMAGEA, *IMAGEB;
+using namespace cv;
 
 CImageMorph::CImageMorph(void)
 {
